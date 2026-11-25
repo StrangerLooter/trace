@@ -1,0 +1,15 @@
+{
+  "name": "@trace/binary-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trace/shared-types": "workspace:*",
+    "hash-wasm": "^4.12.0"
+  }
+}
