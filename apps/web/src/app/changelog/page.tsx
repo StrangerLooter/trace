@@ -10,6 +10,20 @@ export default function ChangelogPage() {
     >
       <article className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-6">
         <span className="font-mono-tech text-xs text-[var(--accent-primary)]">
+          2026-11-25 • P1 Mobile Photo &amp; Video Forensics + Cloud Backend Ready
+        </span>
+        <h2 className="mt-2 text-lg font-medium text-[var(--text-primary)]">
+          HEIC/AVIF ISOBMFF + MKV/WebM EBML Parsers &amp; Railway/Render Container Config
+        </h2>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5">
+          <li>Expanded ISOBMFF box parser to support <code className="font-mono-tech">HEIC</code> and <code className="font-mono-tech">AVIF</code> containers (<code className="font-mono-tech">meta</code>/<code className="font-mono-tech">ispe</code>/<code className="font-mono-tech">irot</code> + embedded EXIF TIFF).</li>
+          <li>Added bounded VINT-based <code className="font-mono-tech">EBML</code> parser for <code className="font-mono-tech">MKV</code> and <code className="font-mono-tech">WebM</code> extracting Segment Info (<code className="font-mono-tech">DateUTC</code>, <code className="font-mono-tech">WritingApp</code>, <code className="font-mono-tech">MuxingApp</code>), Tracks, codecs, dimensions, and Tags while skipping Clusters in O(1).</li>
+          <li>Added <code className="font-mono-tech">render.yaml</code>, <code className="font-mono-tech">apps/api/railway.json</code>, dynamic <code className="font-mono-tech">$PORT</code> Dockerfile support, and Vercel CORS regex allowlisting for automated container backend deployment.</li>
+        </ul>
+      </article>
+
+      <article className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-6">
+        <span className="font-mono-tech text-xs text-[var(--accent-primary)]">
           2026-11-25 • Editorial Design Refresh &amp; PDF Hex Offsets
         </span>
         <h2 className="mt-2 text-lg font-medium text-[var(--text-primary)]">

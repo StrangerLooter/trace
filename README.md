@@ -22,6 +22,7 @@ Most file viewers trust filename extensions, blur filesystem dates with internal
 ## Core Capabilities
 
 - **True Binary Signature Engine (`@trace/file-signatures`):** Evaluates magic bytes across 25+ formats (`JPEG`, `PNG`, `WebP`, `TIFF`, `GIF`, `HEIC`/`AVIF`, `MP3`, `WAV`, `FLAC`, `OGG`, `MP4`/`MOV`, `MKV`/`WebM`, `PDF`, `ZIP`/`DOCX`/`XLSX`/`PPTX`/`ODT`, `PE`, `ELF`, `Mach-O`, `SQLite`, etc.), detects extension-vs-binary spoofing, and drills into nested `ZIP`, `ISOBMFF`, `RIFF`, and `EBML` containers.
+- **Mobile & Screen-Recording Forensics (`HEIC`/`AVIF` + `MKV`/`WebM`):** Parses ISOBMFF `meta`/`ispe`/`irot` + embedded EXIF TIFF inside smartphone `HEIC`/`AVIF` images, and extracts EBML Segment Info (`WritingApp`, `MuxingApp`, `DateUTC`), Tracks, codecs, and Tags from `MKV`/`WebM` recordings while skipping Cluster payloads in O(1).
 - **Dual Inspection Workspace (`/workspace`):**
   - **Analysis Mode:** Overview & safe bitmap preview (`createImageBitmap` raster-only, never inline SVG/HTML/PDF execution), filterable & searchable Metadata groups, Explainable Forensics (`Informational`–`Critical`), Format-Specific Sanitizer, and versioned **JSON / formula-safe CSV / A4 PDF** exports.
   - **RE (Reverse Engineering) Mode:** Live 22-type diagnostic event stream (`TRACE_EVENT_TYPES`, 5,000-event bounded ring buffer), structural region breakdown, and byte-level jump links.
@@ -100,7 +101,7 @@ cd infrastructure && docker compose up -d --build
 Run the workspace verification suites:
 ```bash
 pnpm typecheck      # TypeScript check across all 10 workspace projects
-pnpm test:ts        # Vitest suite (13 test files, 44 tests)
+pnpm test:ts        # Vitest suite (13 test files, 46 tests)
 pnpm build:web      # Production Next.js build (13 static routes)
 ruff check apps/api # Python lint check
 pnpm test:api       # FastAPI pytest suite (13 tests)
@@ -112,13 +113,19 @@ pnpm test:api       # FastAPI pytest suite (13 tests)
 
 ---
 
-## Deployment on Vercel
+## Deployment (Vercel + Railway / Render)
 
-1. Set the Vercel Project **Root Directory** to `apps/web` (or import the repository cleanly with pnpm workspace resolution).
-2. Configure optional environment variables if pairing with a hosted FastAPI container:
-   - `NEXT_PUBLIC_API_BASE_URL=https://api.your-domain`
+### Frontend on Vercel (`apps/web`)
+1. Set the Vercel Project **Root Directory** to `apps/web` (already linked to `StrangerLooter/trace` with `sourceFilesOutsideRootDirectory: true`).
+2. Security response headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`) are enforced automatically via [`apps/web/vercel.json`](apps/web/vercel.json).
+3. To enable consented server-side deep inspection in production, set in Vercel:
+   - `NEXT_PUBLIC_API_BASE_URL=https://<your-railway-or-render-url>`
    - `NEXT_PUBLIC_ENABLE_BACKEND_ESCALATION=true`
-3. Security response headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`) are enforced automatically via [`apps/web/vercel.json`](apps/web/vercel.json).
+
+### Backend Sandbox Container on Railway / Render (`apps/api`)
+`apps/api/Dockerfile` ships with `exiftool`, `qpdf`, `ffmpeg`, `libmagic1`, dynamic `$PORT` binding, and non-root execution (`10001:10001`), with CORS pre-configured for `https://trace-*.vercel.app`:
+- **Railway:** Deploy `apps/api` using [`apps/api/railway.json`](apps/api/railway.json) (`railway up apps/api`).
+- **Render:** Connect the repo as a Blueprint using [`render.yaml`](render.yaml) (auto-deploys `apps/api` Docker image with `/api/v1/health`).
 
 ---
 
