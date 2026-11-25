@@ -167,81 +167,81 @@ export function HeroDropzone() {
         onDrop={handleDrop}
         className={`flex flex-col gap-2.5 rounded-2xl border p-2 backdrop-blur-md transition-colors sm:flex-row sm:items-center sm:rounded-full sm:p-1.5 sm:pl-5 ${
           dragging
-            ? "border-[var(--accent-primary)] bg-[var(--accent-soft)]"
-            : "border-[var(--border-strong)] bg-[var(--bg-glass)]"
+            ? "border-[#34d399] bg-[#34d399]/18"
+            : "border-white/25 bg-[#09151d]/82 shadow-[0_8px_30px_rgba(4,10,15,0.45)]"
         }`}
       >
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3 text-left text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3 text-left text-sm text-[#cbd5e1] transition-colors hover:text-[#f8fafc]"
         >
-          <Upload className="h-4 w-4 shrink-0 text-[var(--accent-primary)]" aria-hidden="true" />
+          <Upload className="h-4 w-4 shrink-0 text-[#e58649]" aria-hidden="true" />
           <span className="truncate">Drop any file here or browse locally...</span>
         </button>
 
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-[var(--cta-bg)] px-5 py-2 text-sm font-medium text-[var(--cta-text)] transition-opacity hover:opacity-90"
+          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-[#f4f7fa] px-5 py-2 text-sm font-medium text-[#091116] shadow-sm transition-all hover:bg-white"
         >
           <span>Inspect a File</span>
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
 
-      {/* Dispatch-inspired calm italic-serif trust micro-caption */}
-      <p className="font-serif-display mt-3.5 text-center text-sm italic tracking-wide text-[var(--text-secondary)]">
+      {/* Calm italic-serif trust micro-caption */}
+      <p className="font-serif-display mt-3.5 text-center text-sm italic tracking-wide text-[#dbe6f0]">
         Local-first in your browser. Zero silent uploads.
       </p>
 
       {probe && (
         <div
           aria-live="polite"
-          className="mt-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-4 text-left"
+          className="mt-5 rounded-xl border border-white/20 bg-[#09151d]/92 p-4 text-left text-[#f4f7fa] shadow-xl backdrop-blur-md"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileSearch className="h-4 w-4 shrink-0 text-[var(--accent-primary)]" aria-hidden="true" />
-              <span className="truncate text-sm font-medium text-[var(--text-primary)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/15 pb-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <FileSearch className="h-4 w-4 shrink-0 text-[#34d399]" aria-hidden="true" />
+              <span className="truncate text-sm font-medium text-[#f8fafc]">
                 {probe.name}
               </span>
             </div>
-            <span className="font-mono-tech text-xs text-[var(--text-secondary)]">
+            <span className="font-mono-tech text-xs text-[#cbd5e1]">
               {formatBytes(probe.sizeBytes)} • Ext: {probe.declaredExt}
             </span>
           </div>
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="font-mono-tech text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+              <p className="font-mono-tech text-[11px] uppercase tracking-wider text-[#94a3b8]">
                 Binary Signature Match
               </p>
-              <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+              <p className="mt-1 text-sm font-medium text-[#f8fafc]">
                 {probe.detectedFormat}
               </p>
-              <p className="font-mono-tech mt-0.5 text-xs text-[var(--text-secondary)]">
+              <p className="font-mono-tech mt-0.5 text-xs text-[#cbd5e1]">
                 {probe.detectedMime}
               </p>
             </div>
 
             <div>
-              <p className="font-mono-tech text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+              <p className="font-mono-tech text-[11px] uppercase tracking-wider text-[#94a3b8]">
                 Offset 0x00000000 (First 16 Bytes)
               </p>
-              <p className="font-mono-tech mt-1 break-all text-xs text-[var(--accent-primary)]">
+              <p className="font-mono-tech mt-1 break-all text-xs text-[#34d399]">
                 {probe.headerHex}
               </p>
               {probe.mismatch && (
-                <p className="mt-1 text-xs font-medium text-[var(--status-warning)]">
+                <p className="mt-1 text-xs font-medium text-[#fbbf24]">
                   Extension mismatch: declared {probe.declaredExt} vs. detected signature.
                 </p>
               )}
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3">
-            <span className="font-mono-tech text-[11px] text-[var(--text-muted)]">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/15 pt-3">
+            <span className="font-mono-tech text-[11px] text-[#94a3b8]">
               Read 64 bytes locally • 0 bytes transmitted
             </span>
             <button
@@ -252,7 +252,7 @@ export function HeroDropzone() {
                 }
                 router.push("/workspace");
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent-primary)] hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#34d399] hover:underline"
             >
               <span>Open Full Analysis Workspace</span>
               <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

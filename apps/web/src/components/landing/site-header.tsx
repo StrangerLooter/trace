@@ -33,7 +33,7 @@ export function SiteHeader() {
             className="hidden h-px w-8 bg-[var(--border-strong)] lg:block"
           />
           <span className="font-mono-tech hidden text-[10px] tracking-[0.14em] text-[var(--text-muted)] xl:inline">
-            ARCHITECT: RAM VISHWAKARMA • LOCAL ENGINE
+            LOCAL ENGINE • BROWSER ISOLATED
           </span>
         </div>
 

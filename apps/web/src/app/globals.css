@@ -1,19 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0b0d10;
-  --bg-secondary: #12161c;
-  --bg-elevated: #181d25;
-  --bg-glass: rgba(18, 22, 28, 0.82);
-  --border-subtle: #232a35;
-  --border-strong: #323b49;
-  --text-primary: #f4f4f5;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --cta-bg: #f4f4f5;
-  --cta-text: #0b0d10;
-  --accent-primary: #22c55e;
-  --accent-soft: rgba(34, 197, 94, 0.12);
+  /* Cabin slate-teal, sunlit copper bezel & alpine meadow palette */
+  --bg-primary: #091116;
+  --bg-secondary: #0f1b22;
+  --bg-elevated: #15242d;
+  --bg-glass: rgba(11, 22, 29, 0.84);
+  --border-subtle: #1e313d;
+  --border-strong: #2c4352;
+  --text-primary: #f4f7fa;
+  --text-secondary: #a4b5c2;
+  --text-muted: #708596;
+  --cta-bg: #f4f7fa;
+  --cta-text: #091116;
+  --accent-primary: #34d399;
+  --accent-warm: #e58649;
+  --accent-soft: rgba(52, 211, 153, 0.14);
+  --accent-warm-soft: rgba(229, 134, 73, 0.16);
   --status-warning: #f59e0b;
   --status-critical: #ef4444;
   --status-info: #60a5fa;
@@ -81,13 +84,13 @@ body {
   overflow-x: clip;
 }
 
-/* Atmospheric subtle grid & radial glow inspired by reference dark UI screenshots */
+/* Atmospheric subtle grid & radial glow harmonized with alpine-copper horizon */
 .hero-glow-backdrop {
   background-image:
-    radial-gradient(ellipse 65% 55% at 50% 0%, rgba(34, 197, 94, 0.08) 0%, transparent 70%),
-    radial-gradient(circle 400px at 15% 15%, rgba(96, 165, 250, 0.05) 0%, transparent 100%),
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    radial-gradient(ellipse 65% 55% at 50% 0%, rgba(96, 165, 250, 0.08) 0%, transparent 70%),
+    radial-gradient(circle 420px at 15% 15%, rgba(229, 134, 73, 0.06) 0%, transparent 100%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
 }
 

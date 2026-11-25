@@ -16,10 +16,10 @@ export function SiteFooter() {
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <span className="font-mono-tech rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 py-1 text-[11px] text-[var(--text-secondary)]">
-                Lead Architect: <strong className="text-[var(--text-primary)]">Ram Vishwakarma</strong>
+                TRACE File Forensics
               </span>
               <span className="font-mono-tech rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 py-1 text-[11px] text-[var(--text-secondary)]">
-                Project: TRACE File Forensics
+                Zero-Upload Web Workers
               </span>
             </div>
             <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3 py-1.5">

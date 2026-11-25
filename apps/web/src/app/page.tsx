@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import { getImageProps } from "next/image";
 import {
   ArrowRight,
   Binary,
@@ -10,6 +11,8 @@ import {
   Lock,
   ShieldAlert,
 } from "lucide-react";
+import heroWindowDesktop from "@/assets/hero-window-desktop.jpg";
+import heroWindowMobile from "@/assets/hero-window-mobile.jpg";
 import { SiteHeader } from "@/components/landing/site-header";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { HeroDropzone } from "@/components/landing/hero-dropzone";
@@ -89,71 +92,123 @@ const FORMAT_FAMILIES = [
 ];
 
 export default function HomePage() {
+  const { props: desktopBgProps } = getImageProps({
+    alt: "",
+    fill: true,
+    priority: true,
+    quality: 82,
+    sizes: "100vw",
+    placeholder: "blur",
+    src: heroWindowDesktop,
+  });
+  const {
+    props: { style: mobileBgStyle, ...mobileBgRest },
+  } = getImageProps({
+    alt: "",
+    fill: true,
+    priority: true,
+    quality: 82,
+    sizes: "100vw",
+    placeholder: "blur",
+    src: heroWindowMobile,
+  });
+
   return (
     <div className="flex min-h-screen flex-col">
       <SiteHeader />
 
       <main id="main-content" className="flex-1">
-        {/* FRAMED EDITORIAL HERO (Railroad.ai + Dispatch + Atlas + UGH synthesis) */}
-        <section className="hero-glow-backdrop border-b border-[var(--border-subtle)] px-3 py-6 sm:px-6 sm:py-10">
-          <div className="relative mx-auto max-w-[1240px] rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)]/90 backdrop-blur-md px-4 py-16 sm:px-10 sm:py-24 lg:py-28">
-            {/* Subtle UGH-inspired corner anchor dots */}
-            <span aria-hidden="true" className="absolute top-4 left-4 h-1 w-1 rounded-full bg-[var(--border-strong)]" />
-            <span aria-hidden="true" className="absolute top-4 right-4 h-1 w-1 rounded-full bg-[var(--border-strong)]" />
-            <span aria-hidden="true" className="absolute bottom-4 left-4 h-1 w-1 rounded-full bg-[var(--border-strong)]" />
-            <span aria-hidden="true" className="absolute bottom-4 right-4 h-1 w-1 rounded-full bg-[var(--border-strong)]" />
+        {/* WINDOW-FRAMED HERO WITH RESPONSIVE ALPINE VISTA & FROSTED CABIN HUD */}
+        <section className="relative isolate flex min-h-[560px] items-center overflow-hidden border-b border-[var(--border-subtle)] bg-[#08131a] px-3 py-10 sm:min-h-[640px] sm:px-6 sm:py-16 lg:min-h-[700px] lg:py-20">
+          {/* Responsive art-directed photography: wide cabin vista on desktop, portrait window on mobile */}
+          <picture className="pointer-events-none absolute inset-0 z-0 block h-full w-full">
+            <source media="(min-width: 768px)" srcSet={desktopBgProps.srcSet} sizes="100vw" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              {...mobileBgRest}
+              alt=""
+              aria-hidden="true"
+              style={{
+                ...mobileBgStyle,
+                objectFit: "cover",
+                objectPosition: "center",
+              }}
+              className="h-full w-full select-none object-cover object-center"
+            />
+          </picture>
 
-            <div className="relative mx-auto max-w-[780px] text-center">
-              <p className="font-mono-tech inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-3.5 py-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-primary)]" aria-hidden="true" />
-                <span>ARCHITECT: RAM VISHWAKARMA • TRACE WORKSPACE</span>
+          {/* Subtle depth vignette & bottom horizon transition into page body */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0"
+            style={{
+              background:
+                "radial-gradient(ellipse 75% 70% at 50% 45%, rgba(8, 19, 26, 0.14) 0%, rgba(8, 19, 26, 0.62) 100%)",
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-28 bg-gradient-to-b from-transparent to-[var(--bg-primary)]/90"
+          />
+
+          <div className="relative z-10 mx-auto w-full max-w-[1240px]">
+            <div className="relative mx-auto max-w-[780px] rounded-[26px] border border-white/20 bg-[#08131a]/64 px-4 py-10 text-center shadow-[0_28px_90px_rgba(4,10,15,0.58),inset_0_1px_0_rgba(255,204,166,0.34)] backdrop-blur-md sm:px-10 sm:py-14">
+              {/* Subtle copper-tinted corner rivet anchors matching the window frame */}
+              <span aria-hidden="true" className="absolute top-4 left-4 h-1.5 w-1.5 rounded-full bg-[#e58649]/65" />
+              <span aria-hidden="true" className="absolute top-4 right-4 h-1.5 w-1.5 rounded-full bg-[#e58649]/65" />
+              <span aria-hidden="true" className="absolute bottom-4 left-4 h-1.5 w-1.5 rounded-full bg-white/30" />
+              <span aria-hidden="true" className="absolute bottom-4 right-4 h-1.5 w-1.5 rounded-full bg-white/30" />
+
+              <p className="font-mono-tech inline-flex items-center gap-2 rounded-full border border-white/20 bg-[#09151d]/75 px-3.5 py-1 text-[10px] uppercase tracking-[0.16em] text-[#e2e8f0]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#e58649]" aria-hidden="true" />
+                <span>TRACE WORKSPACE • ZERO-UPLOAD BINARY FORENSICS</span>
               </p>
 
-              <h1 className="font-serif-display mt-7 text-5xl leading-[1.02] tracking-[-0.02em] text-[var(--text-primary)] sm:text-7xl lg:text-[84px]">
-                Look beyond <span className="italic">the file.</span>
+              <h1 className="font-serif-display mt-6 text-5xl leading-[1.02] tracking-[-0.02em] text-[#f8fafc] sm:text-7xl lg:text-[84px]">
+                Look beyond <span className="italic text-[#fde6cf]">the file.</span>
               </h1>
 
-              <p className="mx-auto mt-5 max-w-[56ch] text-sm leading-relaxed text-[var(--text-secondary)] sm:text-base">
+              <p className="mx-auto mt-5 max-w-[54ch] text-sm leading-relaxed text-[#dbe6f0] sm:text-base">
                 Inspect hidden metadata, verify binary signatures, trace raw byte
                 offsets, and strip sensitive tags—without uploading your files.
               </p>
 
               <HeroDropzone />
 
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-5 text-xs text-[var(--text-secondary)]">
+              <div className="mt-7 flex flex-wrap items-center justify-center gap-5 text-xs text-[#cbd5e1]">
                 <Link
                   href="#re-mode"
-                  className="inline-flex items-center gap-1.5 font-medium text-[var(--text-primary)] hover:text-[var(--accent-primary)]"
+                  className="inline-flex items-center gap-1.5 font-medium text-[#f8fafc] transition-colors hover:text-[#34d399]"
                 >
                   <span>Explore the Engine</span>
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                 </Link>
-                <span aria-hidden="true" className="text-[var(--border-strong)]">
+                <span aria-hidden="true" className="text-white/30">
                   /
                 </span>
-                <Link href="/formats" className="hover:text-[var(--text-primary)]">
+                <Link href="/formats" className="transition-colors hover:text-[#f8fafc]">
                   Format Registry
                 </Link>
-                <span aria-hidden="true" className="text-[var(--border-strong)]">
+                <span aria-hidden="true" className="text-white/30">
                   /
                 </span>
-                <Link href="/workspace" className="hover:text-[var(--text-primary)]">
+                <Link href="/workspace" className="transition-colors hover:text-[#f8fafc]">
                   Open Workspace
                 </Link>
               </div>
             </div>
 
-            {/* Atlas-inspired vertical byte depth scale on large screens */}
+            {/* Vertical byte depth telemetry along the dark cabin pillar on desktop */}
             <aside
               aria-hidden="true"
-              className="pointer-events-none absolute top-14 right-8 hidden flex-col items-end gap-3.5 font-mono-tech text-[10px] tracking-[0.14em] text-[var(--text-muted)] xl:flex"
+              className="pointer-events-none absolute top-10 right-2 hidden flex-col items-end gap-3 rounded-xl border border-white/15 bg-[#08131a]/65 px-3 py-4 font-mono-tech text-[10px] tracking-[0.14em] text-[#cbd5e1] backdrop-blur-sm xl:flex"
             >
               <span>0 B • SURFACE</span>
-              <span className="h-10 w-px bg-[var(--border-subtle)]" />
-              <span className="text-[var(--accent-primary)]">64 B • SIGNATURE</span>
-              <span className="h-10 w-px bg-[var(--border-subtle)]" />
-              <span>4 KB • METADATA</span>
-              <span className="h-10 w-px bg-[var(--border-subtle)]" />
+              <span className="h-7 w-px bg-white/25" />
+              <span className="text-[#e58649]">64 B • SIGNATURE</span>
+              <span className="h-7 w-px bg-white/25" />
+              <span className="text-[#34d399]">4 KB • METADATA</span>
+              <span className="h-7 w-px bg-white/25" />
               <span>EOF • RAW BYTES</span>
             </aside>
           </div>
