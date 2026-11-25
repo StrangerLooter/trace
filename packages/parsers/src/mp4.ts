@@ -1,3 +1,4 @@
+import exifr from "exifr";
 import type { FormatParser, ParserContext, ParserOutput } from "@trace/parser-registry";
 import type { DetectedStructure, ForensicFinding, MetadataField } from "@trace/shared-types";
 import { createMetadataField, emitStructure, isSensitiveTagKey } from "./helpers";
@@ -55,11 +56,11 @@ async function readBoxHeader(
 
 export class Mp4Parser implements FormatParser {
   readonly id = "isobmff-box-parser";
-  readonly version = "0.1.0";
-  readonly supportedFormatIds = ["mp4", "mov", "m4a"] as const;
+  readonly version = "0.2.0";
+  readonly supportedFormatIds = ["mp4", "mov", "m4a", "heic", "avif"] as const;
 
   canParse(id: { formatId: string }): boolean {
-    return id.formatId === "mp4" || id.formatId === "mov" || id.formatId === "m4a";
+    return ["mp4", "mov", "m4a", "heic", "avif"].includes(id.formatId);
   }
 
   async parse(ctx: ParserContext): Promise<ParserOutput> {
@@ -68,11 +69,16 @@ export class Mp4Parser implements FormatParser {
     const findings: ForensicFinding[] = [];
     const warnings: string[] = [];
     const totalSize = ctx.reader.byteLength;
+    const isImageContainer =
+      ctx.identification.formatId === "heic" || ctx.identification.formatId === "avif";
+    const defaultGroup = isImageContainer ? "camera" : "video";
 
     let offset = 0;
     let topCount = 0;
-    let sawMoov = false;
+    let sawContainerMeta = false;
     let mdatBytes = 0;
+    let firstMdatOffset = -1;
+    let firstMdatSize = 0;
 
     // Walk top-level boxes; skip mdat payloads via offset math so 5 GB files take milliseconds
     while (offset + 8 <= totalSize && topCount < 256) {
@@ -102,19 +108,56 @@ export class Mp4Parser implements FormatParser {
             rawKey: "ftyp.major_brand",
             value: majorBrand,
             dataType: "string",
-            group: "video",
+            group: defaultGroup,
             parserId: this.id,
             byteRange: { start: offset + box.headerSize, length: 4 },
           })
         );
       } else if (box.type === "mdat") {
+        if (firstMdatOffset < 0) {
+          firstMdatOffset = offset + box.headerSize;
+          firstMdatSize = box.size - box.headerSize;
+        }
         mdatBytes += box.size;
       } else if (box.type === "moov") {
-        sawMoov = true;
-        await this.walkMoov(ctx, offset + box.headerSize, offset + box.size, boxNode, fields);
+        sawContainerMeta = true;
+        await this.walkMoov(ctx, offset + box.headerSize, offset + box.size, boxNode, fields, 0, defaultGroup);
+      } else if (box.type === "meta" && box.size > box.headerSize + 4) {
+        sawContainerMeta = true;
+        await this.walkMoov(
+          ctx,
+          offset + box.headerSize + 4,
+          offset + box.size,
+          boxNode,
+          fields,
+          0,
+          defaultGroup
+        );
       }
 
       offset += box.size;
+    }
+
+    // Extract embedded TIFF/EXIF from HEIC/AVIF bounded window without buffering huge media streams
+    if (isImageContainer && totalSize <= 25 * 1024 * 1024) {
+      const scanRanges: Array<{ start: number; len: number }> = [
+        { start: 0, len: Math.min(totalSize, 512 * 1024) },
+      ];
+      if (firstMdatOffset > 0 && firstMdatOffset < totalSize && firstMdatSize > 0) {
+        scanRanges.push({
+          start: firstMdatOffset,
+          len: Math.min(firstMdatSize, 256 * 1024),
+        });
+      }
+      for (const range of scanRanges) {
+        const slice = await ctx.reader.read(range.start, range.len, ctx.signal);
+        const exifHeaderOffset = this.findTiffAfterExifMarker(slice);
+        if (exifHeaderOffset >= 0) {
+          const tiffBytes = slice.subarray(exifHeaderOffset);
+          await this.parseEmbeddedExifTiff(ctx, tiffBytes, fields, warnings);
+          break;
+        }
+      }
     }
 
     const uninspectedReasons: string[] = [];
@@ -134,11 +177,87 @@ export class Mp4Parser implements FormatParser {
       coveragePatch: {
         headerInspected: true,
         footerInspected: offset === totalSize,
-        containerIndexInspected: sawMoov,
+        containerIndexInspected: sawContainerMeta,
         completeFileScanned: mdatBytes === 0 && offset === totalSize,
         uninspectedReasons,
       },
     };
+  }
+
+  private findTiffAfterExifMarker(bytes: Uint8Array): number {
+    for (let i = 0; i + 10 < bytes.byteLength; i++) {
+      if (
+        bytes[i] === 0x45 && // E
+        bytes[i + 1] === 0x78 && // x
+        bytes[i + 2] === 0x69 && // i
+        bytes[i + 3] === 0x66 && // f
+        bytes[i + 4] === 0x00 &&
+        bytes[i + 5] === 0x00
+      ) {
+        const t = i + 6;
+        if (
+          (bytes[t] === 0x49 && bytes[t + 1] === 0x49 && bytes[t + 2] === 0x2a && bytes[t + 3] === 0x00) ||
+          (bytes[t] === 0x4d && bytes[t + 1] === 0x4d && bytes[t + 2] === 0x00 && bytes[t + 3] === 0x2a)
+        ) {
+          return t;
+        }
+      }
+    }
+    return -1;
+  }
+
+  private async parseEmbeddedExifTiff(
+    ctx: ParserContext,
+    tiffBytes: Uint8Array,
+    fields: MetadataField[],
+    warnings: string[]
+  ): Promise<void> {
+    try {
+      const parsed = await exifr.parse(tiffBytes, {
+        tiff: true,
+        exif: true,
+        gps: true,
+        xmp: false,
+        makerNote: false,
+      });
+      if (!parsed || typeof parsed !== "object") return;
+      for (const [key, rawVal] of Object.entries(parsed)) {
+        if (rawVal === undefined || rawVal === null) continue;
+        if (rawVal instanceof Uint8Array || ArrayBuffer.isView(rawVal)) continue;
+
+        const sens = isSensitiveTagKey(key);
+        let group: MetadataField["group"] = "exif";
+        if (key.toLowerCase().includes("gps") || key === "latitude" || key === "longitude") {
+          group = "gps";
+        } else if (["Make", "Model", "LensModel", "LensMake", "BodySerialNumber", "SerialNumber"].includes(key)) {
+          group = "camera";
+        }
+        const valueStr = rawVal instanceof Date ? rawVal.toISOString() : String(rawVal);
+        fields.push(
+          createMetadataField(ctx, {
+            idSuffix: `heic-exifr-${key}`,
+            fieldName: key,
+            rawKey: `EXIF.${key}`,
+            value: rawVal instanceof Date ? rawVal.toISOString() : (rawVal as MetadataField["value"]),
+            displayValue: valueStr,
+            dataType:
+              rawVal instanceof Date
+                ? "date"
+                : typeof rawVal === "number"
+                  ? "number"
+                  : typeof rawVal === "boolean"
+                    ? "boolean"
+                    : "string",
+            group,
+            parserId: "exifr",
+            isSensitive: sens.sensitive,
+            sensitivityReason: sens.reason,
+          })
+        );
+      }
+    } catch (err) {
+      warnings.push(`HEIC/AVIF EXIF decode warning: ${err instanceof Error ? err.message : "unknown"}`);
+    }
   }
 
   private async walkMoov(
@@ -147,9 +266,10 @@ export class Mp4Parser implements FormatParser {
     end: number,
     parent: DetectedStructure,
     fields: MetadataField[],
-    depth = 0
+    depth = 0,
+    defaultGroup: MetadataField["group"] = "video"
   ): Promise<void> {
-    if (depth > 4) return;
+    if (depth > 5) return;
     let pos = start;
     let count = 0;
 
@@ -171,7 +291,42 @@ export class Mp4Parser implements FormatParser {
       const payloadStart = pos + box.headerSize;
       const payloadLen = box.size - box.headerSize;
 
-      if (box.type === "mvhd" && payloadLen >= 24) {
+      if (box.type === "ispe" && payloadLen >= 12) {
+        const buf = await ctx.reader.read(payloadStart, 12, ctx.signal);
+        const dv = new DataView(buf.buffer, buf.byteOffset, 12);
+        const width = dv.getUint32(4, false);
+        const height = dv.getUint32(8, false);
+        if (width > 0 && height > 0) {
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: `ispe-${pos}`,
+              fieldName: "Image Dimensions",
+              rawKey: "ispe.dimensions",
+              value: `${width}x${height}`,
+              dataType: "string",
+              group: defaultGroup,
+              parserId: this.id,
+              byteRange: { start: payloadStart + 4, length: 8 },
+            })
+          );
+        }
+      } else if (box.type === "irot" && payloadLen >= 1) {
+        const buf = await ctx.reader.read(payloadStart, 1, ctx.signal);
+        const degrees = (buf[0] & 0x03) * 90;
+        fields.push(
+          createMetadataField(ctx, {
+            idSuffix: `irot-${pos}`,
+            fieldName: "Image Rotation",
+            rawKey: "irot.angle",
+            value: degrees,
+            displayValue: `${degrees}°`,
+            dataType: "number",
+            group: defaultGroup,
+            parserId: this.id,
+            byteRange: { start: payloadStart, length: 1 },
+          })
+        );
+      } else if (box.type === "mvhd" && payloadLen >= 24) {
         const buf = await ctx.reader.read(payloadStart, Math.min(payloadLen, 36), ctx.signal);
         const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
         const version = buf[0];
@@ -234,11 +389,11 @@ export class Mp4Parser implements FormatParser {
             );
           }
         }
-      } else if (box.type === "udta" || box.type === "trak" || box.type === "ilst") {
-        await this.walkMoov(ctx, payloadStart, pos + box.size, node, fields, depth + 1);
+      } else if (["udta", "trak", "ilst", "iprp", "ipco"].includes(box.type)) {
+        await this.walkMoov(ctx, payloadStart, pos + box.size, node, fields, depth + 1, defaultGroup);
       } else if (box.type === "meta" && payloadLen > 12) {
         // FullBox (4 bytes version/flags) before sub-boxes
-        await this.walkMoov(ctx, payloadStart + 4, pos + box.size, node, fields, depth + 1);
+        await this.walkMoov(ctx, payloadStart + 4, pos + box.size, node, fields, depth + 1, defaultGroup);
       } else if (ILST_TAGS[box.type] && payloadLen > 16 && payloadLen <= 65536) {
         const item = await ctx.reader.read(payloadStart, payloadLen, ctx.signal);
         // Look for nested 'data' atom inside ilst entry
