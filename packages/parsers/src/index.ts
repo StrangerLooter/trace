@@ -1,26 +1,33 @@
 import { ParserRegistry } from "@trace/parser-registry";
+import { ArchiveHeaderParser } from "./archive";
 import { Mp3Parser, WavParser } from "./audio";
 import { EbmlParser } from "./ebml";
 import { ElfHeaderParser, PeHeaderParser } from "./executable";
+import { FontMetadataParser } from "./font";
 import { JpegParser } from "./jpeg";
 import { Mp4Parser } from "./mp4";
 import { PdfParser } from "./pdf";
 import { PngParser } from "./png";
+import { SqliteHeaderParser } from "./sqlite";
 import { TiffParser } from "./tiff";
 import { WebpParser } from "./webp";
 import { ZipOfficeParser } from "./zip";
 
+export * from "./archive";
 export * from "./audio";
 export * from "./ebml";
 export * from "./executable";
+export * from "./font";
 export * from "./helpers";
 export * from "./jpeg";
 export * from "./mp4";
 export * from "./pdf";
 export * from "./png";
+export * from "./sqlite";
 export * from "./tiff";
 export * from "./webp";
 export * from "./zip";
+export type { FormatParser } from "@trace/parser-registry";
 
 export function createDefaultParserRegistry(): ParserRegistry {
   const registry = new ParserRegistry();
@@ -34,6 +41,9 @@ export function createDefaultParserRegistry(): ParserRegistry {
   registry.register(new EbmlParser());
   registry.register(new PdfParser());
   registry.register(new ZipOfficeParser());
+  registry.register(new ArchiveHeaderParser());
+  registry.register(new FontMetadataParser());
+  registry.register(new SqliteHeaderParser());
   registry.register(new PeHeaderParser());
   registry.register(new ElfHeaderParser());
   return registry;

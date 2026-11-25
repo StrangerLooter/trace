@@ -279,4 +279,22 @@ describe("@trace/parsers", () => {
     expect(out.fields.find((f) => f.rawKey === "Tracks.Video.PixelHeight")?.value).toBe(1080);
     expect(out.coveragePatch.containerIndexInspected).toBe(true);
   });
+
+  it("parses SQLite 3 database header and 7z archive header", async () => {
+    const sqlite = new Uint8Array(100);
+    sqlite.set(ascii("SQLite format 3\0"), 0);
+    const sdv = new DataView(sqlite.buffer);
+    sdv.setUint16(16, 4096, false);
+    sdv.setUint32(28, 12, false);
+    sdv.setUint32(56, 1, false);
+    sdv.setUint32(96, 3045000, false);
+    const sqlOut = await runParse(sqlite, "store.db");
+    expect(sqlOut.fields.find((f) => f.rawKey === "SQLite.PageSize")?.value).toBe(4096);
+    expect(sqlOut.fields.find((f) => f.rawKey === "SQLite.TextEncoding")?.value).toBe("UTF-8");
+
+    const sevenZ = new Uint8Array(32);
+    sevenZ.set([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0x00, 0x04], 0);
+    const zOut = await runParse(sevenZ, "backup.7z");
+    expect(zOut.fields.find((f) => f.rawKey === "7z.Version")?.value).toBe("0.4");
+  });
 });

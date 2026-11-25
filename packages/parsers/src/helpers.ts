@@ -1,3 +1,5 @@
+import { XMLParser } from "fast-xml-parser";
+export { unzipSync, zipSync } from "fflate";
 import type { ParserContext } from "@trace/parser-registry";
 import type {
   ByteRange,
@@ -134,4 +136,89 @@ export function isSensitiveTagKey(rawKey: string): { sensitive: boolean; reason?
     return { sensitive: true, reason: "Reveals creation or modification timeline" };
   }
   return { sensitive: false };
+}
+
+const XMP_TARGET_KEYS = new Set([
+  "CreatorTool",
+  "CreateDate",
+  "ModifyDate",
+  "MetadataDate",
+  "DocumentID",
+  "InstanceID",
+  "OriginalDocumentID",
+  "creator",
+  "rights",
+  "title",
+  "description",
+  "softwareAgent",
+  "action",
+  "when",
+  "Make",
+  "Model",
+]);
+
+/** Safely parse an XMP XML packet (XXE disabled) into normalized 'xmp' MetadataFields. */
+export function extractXmpFields(
+  xml: string,
+  ctx: ParserContext,
+  parserId: string,
+  fields: MetadataField[],
+  byteRange?: ByteRange
+): number {
+  if (!xml || xml.length > 512 * 1024 || xml.includes("<!DOCTYPE") || xml.includes("<!ENTITY")) {
+    return 0;
+  }
+  let added = 0;
+  try {
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: "",
+      processEntities: false,
+      removeNSPrefix: true,
+    });
+    const doc = parser.parse(xml) as Record<string, unknown>;
+    const seen = new Set<string>();
+
+    const walk = (node: unknown, depth: number) => {
+      if (depth > 8 || added >= 40 || node === null || node === undefined) return;
+      if (Array.isArray(node)) {
+        for (const item of node.slice(0, 12)) walk(item, depth + 1);
+        return;
+      }
+      if (typeof node !== "object") return;
+      for (const [key, val] of Object.entries(node as Record<string, unknown>)) {
+        if (added >= 40) break;
+        if (val === null || val === undefined) continue;
+        if (typeof val === "object") {
+          walk(val, depth + 1);
+          continue;
+        }
+        const cleanKey = key.replace(/^@/, "");
+        if (!XMP_TARGET_KEYS.has(cleanKey)) continue;
+        const valStr = String(val).trim();
+        if (!valStr || seen.has(`${cleanKey}=${valStr}`)) continue;
+        seen.add(`${cleanKey}=${valStr}`);
+        const sens = isSensitiveTagKey(cleanKey);
+        added++;
+        fields.push(
+          createMetadataField(ctx, {
+            idSuffix: `xmp-${cleanKey}-${added}`,
+            fieldName: `XMP ${cleanKey}`,
+            rawKey: `XMP.${cleanKey}`,
+            value: valStr.length > 512 ? `${valStr.slice(0, 512)}...` : valStr,
+            dataType: cleanKey.toLowerCase().includes("date") || cleanKey === "when" ? "date" : "string",
+            group: "xmp",
+            parserId,
+            byteRange,
+            isSensitive: sens.sensitive || cleanKey === "DocumentID" || cleanKey === "creator",
+            sensitivityReason: sens.reason ?? "Embedded XMP provenance or edit history tag",
+          })
+        );
+      }
+    };
+    walk(doc, 0);
+  } catch {
+    return 0;
+  }
+  return added;
 }
