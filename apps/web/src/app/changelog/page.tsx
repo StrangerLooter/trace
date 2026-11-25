@@ -10,6 +10,21 @@ export default function ChangelogPage() {
     >
       <article className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-6">
         <span className="font-mono-tech text-xs text-[var(--accent-primary)]">
+          2026-11-25 • Platform Expansion: Forensics, Sanitizers, Hex &amp; Automation
+        </span>
+        <h2 className="mt-2 text-lg font-medium text-[var(--text-primary)]">
+          Full Suite Upgrade: Diff View, Sample Locker, Sanitizers &amp; Telemetry
+        </h2>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5">
+          <li>Added local parsers for SQLite 3 headers, TTF/OTF/WOFF fonts, RAR/7z archives, C2PA markers, JPEG DQT quality/ICC/IFD1 thumbnails, PNG AI generation params, and PDF revision/URI scans.</li>
+          <li>Added Multi-Layer Timeline cards (OS vs. Embedded dates), opt-in OpenStreetMap GPS card, and WhatsApp stripping + GPS clock drift forensic rules.</li>
+          <li>Added lossless browser sanitizers for WebP, MP3 ID3, WAV chunks, and DOCX/XLSX/PPTX docProps, plus JPEG orientation baking and batch ZIP bundling.</li>
+          <li>Upgraded Workspace with Side-by-Side Diff Panel, 3-file Sample Evidence Locker, Hex Entropy Sparkline, ASCII/UTF-16LE Strings extractor, keyboard shortcuts, and Open Graph previews.</li>
+        </ul>
+      </article>
+
+      <article className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-6">
+        <span className="font-mono-tech text-xs text-[var(--accent-primary)]">
           2026-11-25 • P1 Mobile Photo &amp; Video Forensics + Cloud Backend Ready
         </span>
         <h2 className="mt-2 text-lg font-medium text-[var(--text-primary)]">

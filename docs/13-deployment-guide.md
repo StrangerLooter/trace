@@ -12,13 +12,20 @@
 
 ---
 
-## 2. Frontend Deployment (Vercel)
+## 2. Frontend Deployment (Vercel) + Custom Domain
 
-1. Connect repository in Vercel with **Root Directory** set to `apps/web` (or configure monorepo build command `pnpm --dir ../.. install && pnpm build:web`).
+1. Connect repository in Vercel with **Root Directory** set to `apps/web` (`sourceFilesOutsideRootDirectory: true`).
 2. `apps/web/vercel.json` automatically attaches `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and `Permissions-Policy`.
 3. Set environment variables in Vercel:
-   - `NEXT_PUBLIC_API_BASE_URL=https://api.<your-domain>`
+   - `NEXT_PUBLIC_API_BASE_URL=https://<your-railway-or-render-backend>`
    - `NEXT_PUBLIC_ENABLE_BACKEND_ESCALATION=true` (or `false` for pure local-only deployment)
+4. **Optional Custom Domain (`trace.yourdomain.dev`):**
+   - Run `vercel domains add trace.yourdomain.dev --scope ram-vishwakarmas-projects`
+   - Point your DNS `CNAME` (`trace`) -> `cname.vercel-dns.com`.
+
+## 2b. Hands-Free Backend Deployment (Railway / Render)
+- **Railway (Top CLI Pick):** Run `railway login` once -> `railway up apps/api` (uses `apps/api/railway.json` + `apps/api/Dockerfile` with `exiftool`, `qpdf`, `ffmpeg`, `libmagic1`, and `$PORT` binding).
+- **Render (Blueprint):** Connect repo in Render -> Blueprint picks up root `render.yaml` cleanly (`rootDir: apps/api`, `/api/v1/health`).
 
 ---
 

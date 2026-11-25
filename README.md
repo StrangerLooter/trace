@@ -101,7 +101,7 @@ cd infrastructure && docker compose up -d --build
 Run the workspace verification suites:
 ```bash
 pnpm typecheck      # TypeScript check across all 10 workspace projects
-pnpm test:ts        # Vitest suite (13 test files, 46 tests)
+pnpm test:ts        # Vitest suite (13 test files, 50 tests)
 pnpm build:web      # Production Next.js build (13 static routes)
 ruff check apps/api # Python lint check
 pnpm test:api       # FastAPI pytest suite (13 tests)
