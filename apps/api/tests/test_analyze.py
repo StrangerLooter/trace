@@ -40,3 +40,29 @@ def test_feedback_endpoint_validates_payload() -> None:
     )
     assert ok.status_code == 200
     assert ok.json()["accepted"] is True
+
+
+def test_malformed_pdf_and_elf_emit_warnings_without_crashing() -> None:
+    pdf_bytes = b"%PDF-1.4\n1 0 obj<< /Type /Catalog >>endobj\n%%EOF"
+    malformed_pdf = client.post(
+        "/api/v1/analyze",
+        files={"file": ("broken.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert malformed_pdf.status_code == 200
+    pdf_body = malformed_pdf.json()
+    assert any(
+        e["eventType"] == "PARSER_WARNING" and e["operation"] == "pypdf"
+        for e in pdf_body["events"]
+    )
+
+    elf_bytes = b"\x7fELF\x02\x01\x01\x00truncated"
+    malformed_elf = client.post(
+        "/api/v1/analyze",
+        files={"file": ("broken.elf", elf_bytes, "application/octet-stream")},
+    )
+    assert malformed_elf.status_code == 200
+    elf_body = malformed_elf.json()
+    assert any(
+        e["eventType"] == "PARSER_WARNING" and e["operation"] == "pyelftools"
+        for e in elf_body["events"]
+    )

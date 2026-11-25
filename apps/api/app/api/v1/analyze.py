@@ -4,7 +4,9 @@ import shutil
 from datetime import datetime, timezone
 from typing import Annotated
 
+from elftools.common.exceptions import ELFError
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from pypdf.errors import PyPdfError
 
 from app.core.config import settings
 from app.parsers.executable_parser import parse_elf_deep, parse_pe_deep, run_optional_pattern_rules
@@ -64,41 +66,52 @@ async def analyze_consented_file(file: Annotated[UploadFile, File()]) -> dict:
         parsers_used: list[str] = []
 
         if b"%PDF-" in head:
-            pdf_res = parse_pdf_deep(input_path)
-            parsers_used.append("pypdf")
-            fields.append(
-                {
-                    "id": f"{job_id}:pdf:pages",
-                    "fieldName": "Page Count (Deep PDF)",
-                    "rawKey": "PDF.PageCount",
-                    "value": pdf_res["page_count"],
-                    "displayValue": (
-                        str(pdf_res["page_count"])
-                        if pdf_res["page_count"] is not None
-                        else "Encrypted"
-                    ),
-                    "dataType": "number",
-                    "group": "pdf",
-                    "sourceParser": "backend:pypdf",
-                    "confidence": "confirmed",
-                    "isSensitive": False,
-                    "status": "valid",
-                }
-            )
-            for k, v in pdf_res["metadata"].items():
+            try:
+                pdf_res = parse_pdf_deep(input_path)
+                parsers_used.append("pypdf")
                 fields.append(
                     {
-                        "id": f"{job_id}:pdf:{k}",
-                        "fieldName": k,
-                        "rawKey": f"PDF.Info.{k}",
-                        "value": v,
-                        "displayValue": v,
-                        "dataType": "string",
+                        "id": f"{job_id}:pdf:pages",
+                        "fieldName": "Page Count (Deep PDF)",
+                        "rawKey": "PDF.PageCount",
+                        "value": pdf_res["page_count"],
+                        "displayValue": (
+                            str(pdf_res["page_count"])
+                            if pdf_res["page_count"] is not None
+                            else "Encrypted"
+                        ),
+                        "dataType": "number",
                         "group": "pdf",
                         "sourceParser": "backend:pypdf",
                         "confidence": "confirmed",
-                        "isSensitive": k.lower() in {"author", "creator", "producer"},
+                        "isSensitive": False,
                         "status": "valid",
+                    }
+                )
+                for k, v in pdf_res["metadata"].items():
+                    fields.append(
+                        {
+                            "id": f"{job_id}:pdf:{k}",
+                            "fieldName": k,
+                            "rawKey": f"PDF.Info.{k}",
+                            "value": v,
+                            "displayValue": v,
+                            "dataType": "string",
+                            "group": "pdf",
+                            "sourceParser": "backend:pypdf",
+                            "confidence": "confirmed",
+                            "isSensitive": k.lower() in {"author", "creator", "producer"},
+                            "status": "valid",
+                        }
+                    )
+            except (PyPdfError, ValueError) as exc:
+                events.append(
+                    {
+                        "eventType": "PARSER_WARNING",
+                        "severity": "warn",
+                        "operation": "pypdf",
+                        "message": f"Deep PDF parse skipped: {type(exc).__name__}",
+                        "timestampIso": _now_iso(),
                     }
                 )
         elif head.startswith(b"MZ"):
@@ -131,23 +144,36 @@ async def analyze_consented_file(file: Annotated[UploadFile, File()]) -> dict:
                     }
                 )
         elif head.startswith(b"\x7fELF"):
-            elf_res = parse_elf_deep(input_path)
-            parsers_used.append("pyelftools")
-            fields.append(
-                {
-                    "id": f"{job_id}:elf:needed",
-                    "fieldName": "Dynamic Libraries (DT_NEEDED)",
-                    "rawKey": "ELF.Needed",
-                    "value": elf_res["needed_libraries"],
-                    "displayValue": ", ".join(elf_res["needed_libraries"]) or "Statically linked",
-                    "dataType": "array",
-                    "group": "binary",
-                    "sourceParser": "backend:pyelftools",
-                    "confidence": "confirmed",
-                    "isSensitive": False,
-                    "status": "valid",
-                }
-            )
+            try:
+                elf_res = parse_elf_deep(input_path)
+                parsers_used.append("pyelftools")
+                fields.append(
+                    {
+                        "id": f"{job_id}:elf:needed",
+                        "fieldName": "Dynamic Libraries (DT_NEEDED)",
+                        "rawKey": "ELF.Needed",
+                        "value": elf_res["needed_libraries"],
+                        "displayValue": (
+                            ", ".join(elf_res["needed_libraries"]) or "Statically linked"
+                        ),
+                        "dataType": "array",
+                        "group": "binary",
+                        "sourceParser": "backend:pyelftools",
+                        "confidence": "confirmed",
+                        "isSensitive": False,
+                        "status": "valid",
+                    }
+                )
+            except (ELFError, ValueError, EOFError) as exc:
+                events.append(
+                    {
+                        "eventType": "PARSER_WARNING",
+                        "severity": "warn",
+                        "operation": "pyelftools",
+                        "message": f"Deep ELF parse skipped: {type(exc).__name__}",
+                        "timestampIso": _now_iso(),
+                    }
+                )
 
         # Optional ExifTool enrichment when installed inside container
         exiftool_bin = shutil.which("exiftool")
