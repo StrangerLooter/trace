@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0b0d10;
+  --bg-secondary: #12161c;
+  --bg-elevated: #181d25;
+  --bg-glass: rgba(18, 22, 28, 0.82);
+  --border-subtle: #232a35;
+  --border-strong: #323b49;
+  --text-primary: #f4f4f5;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --cta-bg: #f4f4f5;
+  --cta-text: #0b0d10;
+  --accent-primary: #22c55e;
+  --accent-soft: rgba(34, 197, 94, 0.12);
+  --status-warning: #f59e0b;
+  --status-critical: #ef4444;
+  --status-info: #60a5fa;
+
+  /* ImHex-inspired restrained structural palette */
+  --struct-0-bg: rgba(34, 197, 94, 0.16);
+  --struct-0-fg: #4ade80;
+  --struct-1-bg: rgba(96, 165, 250, 0.16);
+  --struct-1-fg: #93c5fd;
+  --struct-2-bg: rgba(245, 158, 11, 0.16);
+  --struct-2-fg: #fcd34d;
+  --struct-3-bg: rgba(167, 139, 250, 0.16);
+  --struct-3-fg: #c4b5fd;
+  --struct-4-bg: rgba(244, 114, 182, 0.16);
+  --struct-4-fg: #f9a8d4;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f5f3ee;
+  --bg-secondary: #ffffff;
+  --bg-elevated: #eceae3;
+  --bg-glass: rgba(255, 255, 255, 0.86);
+  --border-subtle: #dedad0;
+  --border-strong: #c4bfb2;
+  --text-primary: #111317;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --cta-bg: #111317;
+  --cta-text: #ffffff;
+  --accent-primary: #15803d;
+  --accent-soft: rgba(21, 128, 61, 0.11);
+  --status-warning: #b45309;
+  --status-critical: #dc2626;
+  --status-info: #2563eb;
+
+  --struct-0-bg: rgba(21, 128, 61, 0.14);
+  --struct-0-fg: #15803d;
+  --struct-1-bg: rgba(37, 99, 235, 0.14);
+  --struct-1-fg: #1d4ed8;
+  --struct-2-bg: rgba(180, 83, 9, 0.14);
+  --struct-2-fg: #b45309;
+  --struct-3-bg: rgba(109, 40, 217, 0.14);
+  --struct-3-fg: #6d28d9;
+  --struct-4-bg: rgba(190, 24, 93, 0.14);
+  --struct-4-fg: #be185d;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+@media (min-width: 2560px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+
+/* Atmospheric subtle grid & radial glow inspired by reference dark UI screenshots */
+.hero-glow-backdrop {
+  background-image:
+    radial-gradient(ellipse 65% 55% at 50% 0%, rgba(34, 197, 94, 0.08) 0%, transparent 70%),
+    radial-gradient(circle 400px at 15% 15%, rgba(96, 165, 250, 0.05) 0%, transparent 100%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+}
+
+[data-theme="light"] .hero-glow-backdrop {
+  background-image:
+    radial-gradient(ellipse 65% 55% at 50% 0%, rgba(21, 128, 61, 0.06) 0%, transparent 70%),
+    radial-gradient(circle 400px at 15% 15%, rgba(37, 99, 235, 0.04) 0%, transparent 100%),
+    linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+}
+
+.font-serif-display {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+}
+
+.font-mono-tech {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
