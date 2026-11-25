@@ -5,7 +5,8 @@
 
 **Architect & Lead Engineer:** [Ram Vishwakarma (@StrangerLooter)](https://github.com/StrangerLooter)  
 **Repository:** [github.com/StrangerLooter/trace](https://github.com/StrangerLooter/trace)  
-**Live App (Vercel):** [trace-opal-gamma.vercel.app](https://trace-opal-gamma.vercel.app)
+**Live Frontend (Vercel):** [trace-opal-gamma.vercel.app](https://trace-opal-gamma.vercel.app)  
+**Live Sandbox API (Railway):** [trace-api-production-b6111baf.up.railway.app](https://trace-api-production-b6111baf.up.railway.app/api/v1/health)
 
 ---
 
@@ -119,12 +120,12 @@ pnpm test:api       # FastAPI pytest suite (13 tests)
 1. Set the Vercel Project **Root Directory** to `apps/web` (already linked to `StrangerLooter/trace` with `sourceFilesOutsideRootDirectory: true`).
 2. Security response headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`) are enforced automatically via [`apps/web/vercel.json`](apps/web/vercel.json).
 3. To enable consented server-side deep inspection in production, set in Vercel:
-   - `NEXT_PUBLIC_API_BASE_URL=https://<your-railway-or-render-url>`
+   - `NEXT_PUBLIC_API_BASE_URL=https://trace-api-production-b6111baf.up.railway.app`
    - `NEXT_PUBLIC_ENABLE_BACKEND_ESCALATION=true`
 
 ### Backend Sandbox Container on Railway / Render (`apps/api`)
 `apps/api/Dockerfile` ships with `exiftool`, `qpdf`, `ffmpeg`, `libmagic1`, dynamic `$PORT` binding, and non-root execution (`10001:10001`), with CORS pre-configured for `https://trace-*.vercel.app`:
-- **Railway:** Deploy `apps/api` using [`apps/api/railway.json`](apps/api/railway.json) (`railway up apps/api`).
+- **Railway (Live):** Deployed via [`apps/api/railway.json`](apps/api/railway.json) (`railway up ./apps/api --path-as-root --service trace-api`) at `https://trace-api-production-b6111baf.up.railway.app`.
 - **Render:** Connect the repo as a Blueprint using [`render.yaml`](render.yaml) (auto-deploys `apps/api` Docker image with `/api/v1/health`).
 
 ---
