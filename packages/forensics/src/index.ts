@@ -8,7 +8,9 @@ import type {
 
 export interface ForensicEvaluationInput {
   fileId: string;
+  fileName?: string;
   fileSizeBytes: number;
+  fileLastModifiedMs?: number;
   identification: FileIdentificationResult;
   fields: MetadataField[];
   structures: DetectedStructure[];
@@ -325,6 +327,79 @@ export function evaluateForensicRules(input: ForensicEvaluationInput): ForensicE
       whyItMatters:
         "PE overlays commonly store Authenticode certificates or installer archives, or appended custom data.",
       suggestedAction: "Inspect overlay header bytes in Hex Inspector.",
+      detectionMethod: "packages/forensics",
+      confidence: "confirmed",
+    });
+  }
+
+  // 11. Multi-layer OS vs Embedded Capture Timestamp Discrepancy & WhatsApp Stripping (#1, #13, #14)
+  if (input.fileLastModifiedMs && input.fileLastModifiedMs > 0) {
+    const osDate = new Date(input.fileLastModifiedMs);
+    if (createDate && osDate.getTime() - createDate.getTime() > 24 * 60 * 60 * 1000) {
+      const diffDays = Math.round((osDate.getTime() - createDate.getTime()) / (24 * 60 * 60 * 1000));
+      findings.push({
+        id: `${fileId}:os-vs-embedded-lag`,
+        ruleId: "rule-integrity-transfer-lag",
+        category: "integrity",
+        title: `OS filesystem timestamp is ${diffDays} day(s) newer than embedded capture date`,
+        severity: "informational",
+        explanation: `Embedded capture metadata records ${createDate.toISOString()}, while OS file modification time reports ${osDate.toISOString()}.`,
+        evidence: `Embedded=${createDate.toISOString()}; OS_lastModified=${osDate.toISOString()}`,
+        affectedFieldIds: createField ? [createField.id] : [],
+        whyItMatters:
+          "Transfers via uncompressed messaging ('Sent as Document'), downloads, or archive copies update the outer OS date while preserving original capture EXIF.",
+        suggestedAction: "Compare capture timestamp against delivery timeline in Overview -> Timeline Card.",
+        detectionMethod: "packages/forensics",
+        confidence: "confirmed",
+      });
+    }
+  }
+
+  // WhatsApp / social messenger re-encoding or EXIF stripping indicator (#13)
+  const fileNameLower = (input.fileName ?? "").toLowerCase();
+  const matchesMessengerName = /(whatsapp\s+(image|video)|img-\d{8}-wa\d+|vid-\d{8}-wa\d+)/i.test(fileNameLower);
+  const hasCameraOrExif = fields.some((f) => f.group === "exif" || f.group === "camera" || f.group === "gps");
+  if (
+    matchesMessengerName ||
+    ((identification.formatId === "jpeg" || identification.formatId === "webp") &&
+      input.fileSizeBytes > 16 * 1024 &&
+      !hasCameraOrExif)
+  ) {
+    findings.push({
+      id: `${fileId}:messenger-stripped-exif`,
+      ruleId: "rule-messenger-stripping-indicator",
+      category: "integrity",
+      title: matchesMessengerName
+        ? "Messenger naming & EXIF stripping indicator (e.g. WhatsApp)"
+        : "JPEG/WebP image contains no EXIF/camera metadata",
+      severity: "informational",
+      explanation: matchesMessengerName
+        ? "Filename matches WhatsApp/messenger transfer naming. Standard messenger image uploads re-encode pixels and strip EXIF/GPS."
+        : "Image contains image scan data without EXIF/GPS/Camera tags, consistent with social platform or privacy stripping.",
+      evidence: `format=${identification.formatId}, exifFields=0, fileName=${input.fileName ?? "(unknown)"}`,
+      affectedFieldIds: [],
+      whyItMatters: "When platforms strip EXIF, outer OS timestamps reflect download time rather than shutter time.",
+      suggestedAction: "Request original file as an uncompressed Document transfer if original capture EXIF is required.",
+      detectionMethod: "packages/forensics",
+      confidence: matchesMessengerName ? "confirmed" : "probable",
+    });
+  }
+
+  // GPS Date vs Capture Date Clock Drift (#14)
+  const gpsDateField = fields.find((f) => /^(gpsdatestamp|gps\.gpsdatestamp)$/i.test(f.rawKey ?? f.fieldName));
+  const gpsDate = gpsDateField ? parseSafeDate(gpsDateField.value) : null;
+  if (createDate && gpsDate && Math.abs(createDate.getTime() - gpsDate.getTime()) > 2 * 24 * 60 * 60 * 1000) {
+    findings.push({
+      id: `${fileId}:gps-clock-drift`,
+      ruleId: "rule-integrity-gps-clock-drift",
+      category: "integrity",
+      title: "GPS satellite date disagrees with camera capture clock",
+      severity: "low",
+      explanation: `GPS date (${gpsDate.toISOString().slice(0, 10)}) differs from EXIF capture date (${createDate.toISOString().slice(0, 10)}) by more than 48 hours.`,
+      evidence: `EXIF=${createDate.toISOString()}; GPS=${gpsDate.toISOString()}`,
+      affectedFieldIds: [createField!.id, gpsDateField!.id],
+      whyItMatters: "Can indicate manual date tampering or an incorrectly set camera internal clock.",
+      suggestedAction: "Verify satellite GPS UTC vs local DateTimeOriginal manually.",
       detectionMethod: "packages/forensics",
       confidence: "confirmed",
     });

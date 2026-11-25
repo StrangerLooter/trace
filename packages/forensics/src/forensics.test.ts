@@ -208,4 +208,36 @@ describe("@trace/forensics", () => {
     expect(tailFinding!.title.toLowerCase()).not.toContain("steganography");
     expect(tailFinding!.title.toLowerCase()).not.toContain("malware");
   });
+
+  it("flags OS vs embedded capture transfer lag and WhatsApp messenger stripping", async () => {
+    const reader = new BufferBinaryReader(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+    const id = await detectFileSignature(reader, { fileName: "WhatsApp Image 2024-11-25 at 10.15.00.jpeg" });
+    const fields: MetadataField[] = [
+      {
+        id: "dt-orig",
+        fieldName: "DateTimeOriginal",
+        rawKey: "DateTimeOriginal",
+        value: "2024:11:22 14:30:00",
+        displayValue: "2024:11:22 14:30:00",
+        dataType: "date",
+        group: "exif",
+        sourceParser: "exifr",
+        confidence: "confirmed",
+        isSensitive: true,
+        status: "valid",
+      },
+    ];
+    const evalRes = evaluateForensicRules({
+      fileId: "wa-check",
+      fileName: "WhatsApp Image 2024-11-25 at 10.15.00.jpeg",
+      fileSizeBytes: 24000,
+      fileLastModifiedMs: Date.UTC(2024, 10, 25, 10, 15, 0),
+      identification: id,
+      fields,
+      structures: [],
+      parserFindings: [],
+    });
+    expect(evalRes.findings.some((f) => f.ruleId === "rule-integrity-transfer-lag")).toBe(true);
+    expect(evalRes.findings.some((f) => f.ruleId === "rule-messenger-stripping-indicator")).toBe(true);
+  });
 });
