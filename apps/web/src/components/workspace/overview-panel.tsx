@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock, CloudUpload, Hash, MapPin, Shield, XCircle } from "lucide-react";
 import type { MetadataField } from "@trace/shared-types";
+import { fetchBackendWithWakeRetry, warmBackendHealth } from "@/lib/backend-client";
 import type { FileSession } from "@/stores/workspace-store";
 
 function formatBytes(bytes: number): string {
@@ -36,6 +37,7 @@ export function OverviewPanel({
   const [showMapPreview, setShowMapPreview] = useState(false);
   const [backendConsent, setBackendConsent] = useState(false);
   const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteStatus, setRemoteStatus] = useState<string | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const id = session.identification;
 
@@ -406,7 +408,10 @@ export function OverviewPanel({
               <input
                 type="checkbox"
                 checked={backendConsent}
-                onChange={(e) => setBackendConsent(e.target.checked)}
+                onChange={(e) => {
+                  setBackendConsent(e.target.checked);
+                  if (e.target.checked) void warmBackendHealth();
+                }}
                 className="mt-0.5 accent-[var(--accent-primary)]"
               />
               <span>
@@ -420,16 +425,19 @@ export function OverviewPanel({
                 disabled={!backendConsent || remoteBusy}
                 onClick={async () => {
                   setRemoteBusy(true);
+                  setRemoteStatus(null);
                   setRemoteError(null);
                   try {
-                    const apiBase =
-                      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
                     const form = new FormData();
                     form.append("file", session.file, session.fileName);
-                    const resp = await fetch(`${apiBase}/api/v1/analyze`, {
-                      method: "POST",
-                      body: form,
-                    });
+                    const resp = await fetchBackendWithWakeRetry(
+                      "/api/v1/analyze",
+                      {
+                        method: "POST",
+                        body: form,
+                      },
+                      setRemoteStatus
+                    );
                     const data = await resp.json();
                     if (!resp.ok) {
                       setRemoteError(data.detail || "Backend inspection failed.");
@@ -442,12 +450,16 @@ export function OverviewPanel({
                     );
                   } finally {
                     setRemoteBusy(false);
+                    setRemoteStatus(null);
                   }
                 }}
                 className="inline-flex min-h-[38px] items-center gap-2 rounded-full bg-[var(--cta-bg)] px-4 text-xs font-medium text-[var(--cta-text)] disabled:opacity-40"
               >
                 <span>{remoteBusy ? "Inspecting Remotely..." : "Consent & Run Deep Inspection"}</span>
               </button>
+              {remoteStatus && remoteBusy && (
+                <span className="text-xs text-[var(--status-warning)]">{remoteStatus}</span>
+              )}
               {remoteError && (
                 <span className="text-xs text-[var(--status-critical)]">{remoteError}</span>
               )}

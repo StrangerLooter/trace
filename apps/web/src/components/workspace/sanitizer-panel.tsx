@@ -10,6 +10,7 @@ import {
   type SanitizationCategoryId,
   type SanitizationResult,
 } from "@trace/sanitizers";
+import { fetchBackendWithWakeRetry, getApiBaseUrl, warmBackendHealth } from "@/lib/backend-client";
 import type { FileSession } from "@/stores/workspace-store";
 
 export function SanitizerPanel({
@@ -35,6 +36,7 @@ export function SanitizerPanel({
     warnings: string[];
   } | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
 
   const orientationField = session.fields.find(
@@ -150,15 +152,20 @@ export function SanitizerPanel({
   const handleBackendPdfSanitize = async () => {
     if (!backendConsent) return;
     setRunning(true);
+    setBackendStatus(null);
     setBackendError(null);
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+      const apiBase = getApiBaseUrl();
       const form = new FormData();
       form.append("file", session.file, session.fileName);
-      const resp = await fetch(`${apiBase}/api/v1/sanitize`, {
-        method: "POST",
-        body: form,
-      });
+      const resp = await fetchBackendWithWakeRetry(
+        "/api/v1/sanitize",
+        {
+          method: "POST",
+          body: form,
+        },
+        setBackendStatus
+      );
       const data = await resp.json();
       if (!resp.ok) {
         setBackendError(data.detail || "Backend PDF sanitization failed.");
@@ -184,6 +191,7 @@ export function SanitizerPanel({
       );
     } finally {
       setRunning(false);
+      setBackendStatus(null);
     }
   };
 
@@ -325,7 +333,10 @@ export function SanitizerPanel({
                   <input
                     type="checkbox"
                     checked={backendConsent}
-                    onChange={(e) => setBackendConsent(e.target.checked)}
+                    onChange={(e) => {
+                      setBackendConsent(e.target.checked);
+                      if (e.target.checked) void warmBackendHealth();
+                    }}
                     className="mt-0.5 accent-[var(--accent-primary)]"
                   />
                   <span>
@@ -341,6 +352,9 @@ export function SanitizerPanel({
                 >
                   <span>{running ? "Uploading & Scrubbing..." : "Consent & Clean PDF"}</span>
                 </button>
+                {backendStatus && running && (
+                  <p className="text-xs text-[var(--status-warning)]">{backendStatus}</p>
+                )}
                 {backendError && (
                   <p className="text-xs text-[var(--status-critical)]">{backendError}</p>
                 )}

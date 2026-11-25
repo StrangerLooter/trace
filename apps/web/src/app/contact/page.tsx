@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { StaticDocShell } from "@/components/ui/static-doc-shell";
+import { fetchBackendWithWakeRetry } from "@/lib/backend-client";
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -20,8 +21,7 @@ export default function ContactPage() {
     setSubmitting(true);
     setStatusNote("");
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-      const resp = await fetch(`${apiBase}/api/v1/feedback`, {
+      const resp = await fetchBackendWithWakeRetry("/api/v1/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
