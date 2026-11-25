@@ -26,6 +26,57 @@ export interface DetectionOptions {
   signal?: AbortSignal;
 }
 
+export interface CustomSignatureRule {
+  id: string;
+  formatId: string;
+  displayName: string;
+  category: FileIdentificationResult["category"];
+  mime: string;
+  offset: number;
+  hexPattern: string;
+  extensions?: string[];
+}
+
+const customRules: Array<CustomSignatureRule & { bytes: number[] }> = [];
+
+/** Register user-defined magic-byte signature plugins validated safely without eval. */
+export function registerCustomSignatures(rules: readonly CustomSignatureRule[]): number {
+  let added = 0;
+  for (const r of rules) {
+    const cleaned = r.hexPattern.replace(/0x/gi, "").replace(/[\s,:-]+/g, "");
+    if (
+      !r.id ||
+      !r.formatId ||
+      cleaned.length === 0 ||
+      cleaned.length % 2 !== 0 ||
+      !/^[0-9a-fA-F]+$/.test(cleaned) ||
+      !Number.isInteger(r.offset) ||
+      r.offset < 0 ||
+      r.offset > 65536
+    ) {
+      continue;
+    }
+    const bytes: number[] = [];
+    for (let i = 0; i < cleaned.length; i += 2) {
+      bytes.push(parseInt(cleaned.slice(i, i + 2), 16));
+    }
+    const idx = customRules.findIndex((existing) => existing.id === r.id);
+    const entry = { ...r, bytes };
+    if (idx >= 0) customRules[idx] = entry;
+    else customRules.push(entry);
+    added++;
+  }
+  return added;
+}
+
+export function getCustomSignatures(): readonly CustomSignatureRule[] {
+  return customRules;
+}
+
+export function clearCustomSignatures(): void {
+  customRules.length = 0;
+}
+
 function buildResult(
   formatId: string,
   confidence: IdentificationConfidence,
@@ -421,6 +472,103 @@ export async function detectFileSignature(
       ],
       options
     );
+  }
+
+  // 6b. Fonts (OTF, TTF, WOFF, WOFF2)
+  if (matchAsciiAt(header, 0, "OTTO")) {
+    return buildResult(
+      "otf",
+      "confirmed",
+      [
+        {
+          ruleId: "sig-otf",
+          description: "OpenType Font header (OTTO)",
+          byteRange: { start: 0, length: 4 },
+          matchedHex: formatHex(header.subarray(0, 4)),
+        },
+      ],
+      options
+    );
+  }
+
+  if (matchAsciiAt(header, 0, "wOFF")) {
+    return buildResult(
+      "woff",
+      "confirmed",
+      [
+        {
+          ruleId: "sig-woff",
+          description: "WOFF Font signature (wOFF)",
+          byteRange: { start: 0, length: 4 },
+          matchedHex: formatHex(header.subarray(0, 4)),
+        },
+      ],
+      options
+    );
+  }
+
+  if (matchAsciiAt(header, 0, "wOF2")) {
+    return buildResult(
+      "woff2",
+      "confirmed",
+      [
+        {
+          ruleId: "sig-woff2",
+          description: "WOFF2 Font signature (wOF2)",
+          byteRange: { start: 0, length: 4 },
+          matchedHex: formatHex(header.subarray(0, 4)),
+        },
+      ],
+      options
+    );
+  }
+
+  if (matchBytesAt(header, 0, [0x00, 0x01, 0x00, 0x00, 0x00]) || matchAsciiAt(header, 0, "true")) {
+    return buildResult(
+      "ttf",
+      "probable",
+      [
+        {
+          ruleId: "sig-ttf",
+          description: "TrueType Font sfnt version header",
+          byteRange: { start: 0, length: 4 },
+          matchedHex: formatHex(header.subarray(0, 4)),
+        },
+      ],
+      options,
+      undefined,
+      ["TrueType 0x00010000 sfnt magic matched cleanly"]
+    );
+  }
+
+  // 6c. User-imported custom signature plugins
+  for (const rule of customRules) {
+    if (matchBytesAt(header, rule.offset, rule.bytes)) {
+      const declaredExtension = extractExtension(options.fileName);
+      const extMismatch = Boolean(
+        declaredExtension && rule.extensions?.length && !rule.extensions.includes(declaredExtension)
+      );
+      return {
+        formatId: rule.formatId,
+        displayName: rule.displayName,
+        category: rule.category,
+        detectedMime: rule.mime,
+        declaredExtension,
+        declaredMime: options.declaredMime || null,
+        extensionMismatch: extMismatch,
+        confidence: "confirmed",
+        supportStatus: getFormatSupportStatus(rule.formatId),
+        evidence: [
+          {
+            ruleId: `custom:${rule.id}`,
+            description: `Custom signature plugin (${rule.displayName}) at 0x${rule.offset.toString(16)}`,
+            byteRange: { start: rule.offset, length: rule.bytes.length },
+            matchedHex: formatHex(header.subarray(rule.offset, rule.offset + rule.bytes.length)),
+          },
+        ],
+        secondaryMatches: [],
+      };
+    }
   }
 
   // 7. Weak signatures (lower confidence)

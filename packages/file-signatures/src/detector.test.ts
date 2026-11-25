@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { BufferBinaryReader } from "@trace/binary-core";
-import { detectFileSignature } from "./detector";
+import {
+  clearCustomSignatures,
+  detectFileSignature,
+  registerCustomSignatures,
+} from "./detector";
 
 function fromBytes(bytes: number[], totalLength = bytes.length): BufferBinaryReader {
   const buf = new Uint8Array(totalLength);
@@ -201,5 +205,32 @@ describe("detectFileSignature", () => {
     const empty = await detectFileSignature(fromBytes([]), { fileName: "empty.bin" });
     expect(empty.formatId).toBe("unknown");
     expect(empty.confidence).toBe("unknown");
+  });
+
+  it("identifies fonts (OTF/WOFF/WOFF2) and executes registered custom signature plugins", async () => {
+    const otf = await detectFileSignature(fromBytes(asciiBytes("OTTO\x00\x0c")), { fileName: "font.otf" });
+    expect(otf.formatId).toBe("otf");
+
+    const woff = await detectFileSignature(fromBytes(asciiBytes("wOFF")), { fileName: "font.woff" });
+    expect(woff.formatId).toBe("woff");
+
+    registerCustomSignatures([
+      {
+        id: "rule-pcapng",
+        formatId: "pcapng",
+        displayName: "PCAP-NG Packet Capture",
+        category: "other",
+        mime: "application/x-pcapng",
+        offset: 0,
+        hexPattern: "0A 0D 0D 0A",
+        extensions: ["pcapng"],
+      },
+    ]);
+    const cap = await detectFileSignature(fromBytes([0x0a, 0x0d, 0x0d, 0x0a, 0x00]), {
+      fileName: "net.pcapng",
+    });
+    expect(cap.formatId).toBe("pcapng");
+    expect(cap.evidence[0].ruleId).toBe("custom:rule-pcapng");
+    clearCustomSignatures();
   });
 });
