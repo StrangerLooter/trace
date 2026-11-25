@@ -2,7 +2,7 @@ import exifr from "exifr";
 import { unzlibSync } from "fflate";
 import type { FormatParser, ParserContext, ParserOutput } from "@trace/parser-registry";
 import type { DetectedStructure, ForensicFinding, MetadataField } from "@trace/shared-types";
-import { createMetadataField, emitAnomaly, emitStructure, isSensitiveTagKey } from "./helpers";
+import { createMetadataField, emitAnomaly, emitStructure, extractXmpFields, isSensitiveTagKey } from "./helpers";
 
 const PNG_COLOR_TYPES: Record<number, string> = {
   0: "Grayscale",
@@ -198,8 +198,73 @@ export class PngParser implements FormatParser {
                 sensitivityReason: sens.reason ?? (isXmp ? "Embedded XMP XML metadata packet" : undefined),
               })
             );
+            if (isXmp) {
+              extractXmpFields(valueStr, ctx, this.id, fields, { start: payloadStart, length: dataLen });
+            } else if (
+              keyword === "parameters" ||
+              keyword === "prompt" ||
+              keyword === "workflow" ||
+              valueStr.includes("Steps:") ||
+              valueStr.includes("Sampler:")
+            ) {
+              // Decode Stable Diffusion / ComfyUI generation parameters cleanly
+              const modelMatch = /\bModel:\s*([^,\n]+)/i.exec(valueStr);
+              const seedMatch = /\bSeed:\s*(\d+)/i.exec(valueStr);
+              const samplerMatch = /\bSampler:\s*([^,\n]+)/i.exec(valueStr);
+              if (modelMatch || seedMatch || samplerMatch || keyword === "prompt" || keyword === "workflow") {
+                fields.push(
+                  createMetadataField(ctx, {
+                    idSuffix: `ai-gen-${offset}`,
+                    fieldName: "AI Generation Prompt/Workflow",
+                    rawKey: `AI.${keyword}`,
+                    value: [
+                      modelMatch ? `Model=${modelMatch[1].trim()}` : null,
+                      samplerMatch ? `Sampler=${samplerMatch[1].trim()}` : null,
+                      seedMatch ? `Seed=${seedMatch[1]}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ") || `${keyword} (${valueStr.length} chars)`,
+                    dataType: "string",
+                    group: "embedded",
+                    parserId: this.id,
+                    byteRange: { start: payloadStart, length: dataLen },
+                    isSensitive: true,
+                    sensitivityReason: "Reveals AI generation workflow, model, seed, or prompt",
+                  })
+                );
+              }
+            }
           }
         }
+      } else if (type === "iCCP" && dataLen > 0 && dataLen <= 512 * 1024) {
+        const icc = await ctx.reader.read(payloadStart, Math.min(dataLen, 128), ctx.signal);
+        const nul = icc.indexOf(0);
+        const profileName = nul > 0 ? new TextDecoder("latin1").decode(icc.subarray(0, nul)) : "Embedded ICC Profile";
+        fields.push(
+          createMetadataField(ctx, {
+            idSuffix: `iccp-${offset}`,
+            fieldName: "ICC Color Profile",
+            rawKey: "PNG.iCCP",
+            value: profileName,
+            dataType: "string",
+            group: "general",
+            parserId: this.id,
+            byteRange: { start: payloadStart, length: dataLen },
+          })
+        );
+      } else if (type === "caBX") {
+        fields.push(
+          createMetadataField(ctx, {
+            idSuffix: `c2pa-${offset}`,
+            fieldName: "Content Credentials (C2PA)",
+            rawKey: "C2PA.caBX",
+            value: `Present (${dataLen} bytes)`,
+            dataType: "string",
+            group: "embedded",
+            parserId: this.id,
+            byteRange: { start: offset, length: fullChunkLen },
+          })
+        );
       } else if (type === "eXIf" && dataLen > 0 && dataLen <= 2 * 1024 * 1024) {
         const exifRaw = await ctx.reader.read(payloadStart, dataLen, ctx.signal);
         try {

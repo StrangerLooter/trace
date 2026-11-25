@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import type { FormatParser, ParserContext, ParserOutput } from "@trace/parser-registry";
 import type { DetectedStructure, ForensicFinding, MetadataField } from "@trace/shared-types";
-import { createMetadataField, emitAnomaly, emitStructure, isSensitiveTagKey } from "./helpers";
+import { createMetadataField, emitAnomaly, emitStructure, extractXmpFields, isSensitiveTagKey } from "./helpers";
 
 const INFO_KEYS = ["Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate", "ModDate"] as const;
 
@@ -249,6 +249,7 @@ export class PdfParser implements FormatParser {
           });
           const parsedXmp = xmlParser.parse(xmpXml);
           if (parsedXmp) {
+            const xmpAbsRange = xmpStart < headText.length ? { start: xmpStart, length: xmpXml.length } : undefined;
             fields.push(
               createMetadataField(ctx, {
                 idSuffix: "xmp-present",
@@ -259,15 +260,59 @@ export class PdfParser implements FormatParser {
                 dataType: "boolean",
                 group: "xmp",
                 parserId: this.id,
+                byteRange: xmpAbsRange,
                 isSensitive: true,
                 sensitivityReason: "PDF embeds an XMP XML metadata packet",
               })
             );
+            extractXmpFields(xmpXml, ctx, this.id, fields, xmpAbsRange);
           }
         } catch {
           warnings.push("Failed to parse embedded PDF XMP XML safely.");
         }
       }
+    }
+
+    // Incremental update count (#15) & external /URI links (#18)
+    const revMatches = combinedText.match(/\bstartxref\b/g);
+    const revCount = revMatches ? revMatches.length : 1;
+    if (revCount > 1) {
+      fields.push(
+        createMetadataField(ctx, {
+          idSuffix: "revisions",
+          fieldName: "Incremental Revision Count",
+          rawKey: "PDF.RevisionCount",
+          value: revCount,
+          displayValue: `${revCount} revision(s) (incremental updates present)`,
+          dataType: "number",
+          group: "pdf",
+          parserId: this.id,
+          isSensitive: true,
+          sensitivityReason: "Multiple startxref blocks indicate incremental edits where older object versions may persist",
+        })
+      );
+    }
+
+    const uriSet = new Set<string>();
+    for (const m of combinedText.matchAll(/\/URI\s*\((https?:\/\/[^)\r\n]{1,256})\)/gi)) {
+      uriSet.add(m[1]);
+      if (uriSet.size >= 15) break;
+    }
+    if (uriSet.size > 0) {
+      fields.push(
+        createMetadataField(ctx, {
+          idSuffix: "external-uris",
+          fieldName: "External URI Links",
+          rawKey: "PDF.ExternalURIs",
+          value: Array.from(uriSet),
+          displayValue: Array.from(uriSet).slice(0, 5).join(", "),
+          dataType: "array",
+          group: "pdf",
+          parserId: this.id,
+          isSensitive: true,
+          sensitivityReason: "External URI targets inside PDF actions or annotations warrant inspection before clicking",
+        })
+      );
     }
 
     const fullyScanned = tailStart === 0;

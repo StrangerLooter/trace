@@ -20,6 +20,9 @@ const ILST_TAGS: Record<string, string> = {
   "\u00a9too": "Encoder Tool",
   "\u00a9cmt": "Comment",
   "\u00a9xyz": "GPS Location",
+  "\u00a9mak": "Device Make",
+  "\u00a9mod": "Device Model",
+  "\u00a9swr": "Recording Software",
 };
 
 interface BoxHeader {
@@ -389,8 +392,38 @@ export class Mp4Parser implements FormatParser {
             );
           }
         }
-      } else if (["udta", "trak", "ilst", "iprp", "ipco"].includes(box.type)) {
+      } else if (["udta", "trak", "ilst", "iprp", "ipco", "mdia", "minf", "stbl"].includes(box.type)) {
         await this.walkMoov(ctx, payloadStart, pos + box.size, node, fields, depth + 1, defaultGroup);
+      } else if (box.type === "stsd" && payloadLen >= 16) {
+        const stsd = await ctx.reader.read(payloadStart, Math.min(payloadLen, 32), ctx.signal);
+        const codec = String.fromCharCode(stsd[12], stsd[13], stsd[14], stsd[15]).trim();
+        if (/^[a-zA-Z0-9 ._-]{3,4}$/.test(codec)) {
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: `stsd-codec-${pos}`,
+              fieldName: "Sample Entry Codec",
+              rawKey: "stsd.codec",
+              value: codec,
+              dataType: "string",
+              group: defaultGroup,
+              parserId: this.id,
+              byteRange: { start: payloadStart + 12, length: 4 },
+            })
+          );
+        }
+      } else if (box.type === "jumb" || box.type === "c2pa") {
+        fields.push(
+          createMetadataField(ctx, {
+            idSuffix: `c2pa-${pos}`,
+            fieldName: "Content Credentials (C2PA)",
+            rawKey: `C2PA.${box.type}`,
+            value: `Present (${box.size} bytes)`,
+            dataType: "string",
+            group: "embedded",
+            parserId: this.id,
+            byteRange: { start: pos, length: box.size },
+          })
+        );
       } else if (box.type === "meta" && payloadLen > 12) {
         // FullBox (4 bytes version/flags) before sub-boxes
         await this.walkMoov(ctx, payloadStart + 4, pos + box.size, node, fields, depth + 1, defaultGroup);

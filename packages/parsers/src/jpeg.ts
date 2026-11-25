@@ -1,7 +1,26 @@
 import exifr from "exifr";
 import type { FormatParser, ParserContext, ParserOutput } from "@trace/parser-registry";
 import type { DetectedStructure, ForensicFinding, MetadataField } from "@trace/shared-types";
-import { createMetadataField, emitAnomaly, emitStructure, isSensitiveTagKey } from "./helpers";
+import { createMetadataField, emitAnomaly, emitStructure, extractXmpFields, isSensitiveTagKey } from "./helpers";
+
+const STD_LUMA_QTABLE = [
+  16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19, 26, 58, 60, 55,
+  14, 13, 16, 24, 40, 57, 69, 56, 14, 17, 22, 29, 51, 87, 80, 62,
+  18, 22, 37, 56, 68, 109, 103, 77, 24, 35, 55, 64, 81, 104, 113, 92,
+  49, 64, 78, 87, 103, 121, 120, 101, 72, 92, 95, 98, 112, 100, 103, 99,
+];
+
+function estimateJpegQualityFromLumaTable(table: Uint8Array): number | null {
+  if (table.byteLength < 64) return null;
+  let sumRatio = 0;
+  for (let i = 0; i < 64; i++) {
+    sumRatio += (table[i] * 100) / STD_LUMA_QTABLE[i];
+  }
+  const avgScale = sumRatio / 64;
+  if (avgScale <= 1) return 100;
+  const q = avgScale <= 100 ? Math.round((200 - avgScale) / 2) : Math.round(5000 / avgScale);
+  return Math.max(1, Math.min(100, q));
+}
 
 const JPEG_MARKER_NAMES: Record<number, string> = {
   0xd8: "SOI (Start of Image)",
@@ -202,7 +221,78 @@ export class JpegParser implements FormatParser {
 
       // Collect bounded APP1/APP2/APP13 bytes for exifr without reading entropy scan payload
       if ([0xe1, 0xe2, 0xed].includes(markerByte) && fullLen <= 4 * 1024 * 1024) {
-        exifChunks.push(await ctx.reader.read(markerOffset, fullLen, ctx.signal));
+        const segBytes = await ctx.reader.read(markerOffset, fullLen, ctx.signal);
+        exifChunks.push(segBytes);
+        if (markerByte === 0xe1 && segLen > 32) {
+          const textHead = new TextDecoder("latin1").decode(segBytes.subarray(4, Math.min(segBytes.byteLength, 48)));
+          if (textHead.startsWith("http://ns.adobe.com/xap/1.0/")) {
+            const xmpStr = new TextDecoder("utf-8", { fatal: false }).decode(segBytes.subarray(33));
+            extractXmpFields(xmpStr, ctx, this.id, fields, { start: markerOffset + 4, length: segLen - 2 });
+          }
+        }
+        if (markerByte === 0xe2 && segLen > 20) {
+          const iccStr = new TextDecoder("latin1").decode(segBytes.subarray(4, Math.min(segBytes.byteLength, 256)));
+          if (iccStr.startsWith("ICC_PROFILE")) {
+            const mDesc = /desc\0{4}[\s\S]{4,16}?([A-Za-z0-9 _().-]{4,48})/.exec(iccStr);
+            fields.push(
+              createMetadataField(ctx, {
+                idSuffix: `icc-${markerOffset}`,
+                fieldName: "ICC Color Profile",
+                rawKey: "ICC.Description",
+                value: mDesc ? mDesc[1].trim() : "Embedded ICC Profile",
+                dataType: "string",
+                group: "general",
+                parserId: this.id,
+                byteRange: { start: markerOffset, length: fullLen },
+              })
+            );
+          }
+        }
+      }
+
+      // Quantization Table (DQT) quality estimate (#16)
+      if (markerByte === 0xdb && segLen >= 67) {
+        const dqt = await ctx.reader.read(markerOffset + 4, 65, ctx.signal);
+        const pq = (dqt[0] >> 4) & 0x0f;
+        const tq = dqt[0] & 0x0f;
+        if (pq === 0 && tq === 0) {
+          const estQ = estimateJpegQualityFromLumaTable(dqt.subarray(1, 65));
+          if (estQ !== null) {
+            fields.push(
+              createMetadataField(ctx, {
+                idSuffix: `dqt-q-${markerOffset}`,
+                fieldName: "Estimated JPEG Quality (DQT)",
+                rawKey: "JPEG.EstimatedQuality",
+                value: estQ,
+                displayValue: `~${estQ}%`,
+                dataType: "number",
+                group: "general",
+                parserId: this.id,
+                byteRange: { start: markerOffset + 4, length: 65 },
+              })
+            );
+          }
+        }
+      }
+
+      // C2PA Content Credentials in APP11 JUMBF (#6)
+      if (markerByte === 0xeb && segLen > 8) {
+        const app11 = await ctx.reader.read(markerOffset + 4, Math.min(segLen - 2, 64), ctx.signal);
+        const ascii = new TextDecoder("latin1").decode(app11);
+        if (ascii.includes("c2pa") || ascii.includes("jumb")) {
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: `c2pa-${markerOffset}`,
+              fieldName: "Content Credentials (C2PA)",
+              rawKey: "C2PA.APP11",
+              value: `Present (${segLen} bytes)`,
+              dataType: "string",
+              group: "embedded",
+              parserId: this.id,
+              byteRange: { start: markerOffset, length: fullLen },
+            })
+          );
+        }
       }
 
       if (markerByte === 0xda) {
@@ -278,6 +368,27 @@ export class JpegParser implements FormatParser {
         }
       } catch (err) {
         warnings.push(`exifr failed on APP segments: ${err instanceof Error ? err.message : "unknown error"}`);
+      }
+
+      try {
+        const thumb = await exifr.thumbnail(syntheticJpeg);
+        if (thumb && thumb.byteLength > 0) {
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: "exif-thumbnail",
+              fieldName: "Embedded EXIF Thumbnail",
+              rawKey: "JPEG.EmbeddedThumbnail",
+              value: `${thumb.byteLength} bytes`,
+              dataType: "bytes",
+              group: "embedded",
+              parserId: this.id,
+              isSensitive: true,
+              sensitivityReason: "EXIF IFD1 thumbnails can retain uncropped/uncensored versions of the original photo",
+            })
+          );
+        }
+      } catch {
+        // Ignore missing/invalid EXIF thumbnail
       }
     }
 

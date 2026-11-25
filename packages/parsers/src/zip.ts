@@ -308,6 +308,56 @@ export class ZipOfficeParser implements FormatParser {
       );
     }
 
+    // Tracked changes & hidden Excel sheet checks (#19)
+    const wordDocEntry = entries.find((e) => e.name === "word/document.xml");
+    if (wordDocEntry && !wordDocEntry.isEncrypted && wordDocEntry.uncompressedSize <= MAX_XML_ENTRY_BYTES) {
+      const docXml = await this.readEntryText(ctx, wordDocEntry);
+      if (docXml) {
+        const trackCount = (docXml.match(/<w:(?:ins|del)\b/g) ?? []).length;
+        if (trackCount > 0) {
+          const authorMatch = /w:author="([^"]{1,120})"/.exec(docXml);
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: "office-tracked-changes",
+              fieldName: "Tracked Changes Revisions",
+              rawKey: "Office.TrackedChanges",
+              value: authorMatch ? `${trackCount} edit(s), author=${authorMatch[1]}` : `${trackCount} edit(s)`,
+              dataType: "string",
+              group: "embedded",
+              parserId: this.id,
+              isSensitive: true,
+              sensitivityReason: "Tracked insertions/deletions expose deleted draft text and editor names",
+            })
+          );
+        }
+      }
+    }
+
+    const workbookEntry = entries.find((e) => e.name === "xl/workbook.xml");
+    if (workbookEntry && !workbookEntry.isEncrypted && workbookEntry.uncompressedSize <= MAX_XML_ENTRY_BYTES) {
+      const wbXml = await this.readEntryText(ctx, workbookEntry);
+      if (wbXml) {
+        const hiddenSheets = Array.from(wbXml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*state="(hidden|veryHidden)"/gi)).map(
+          (m) => m[1]
+        );
+        if (hiddenSheets.length > 0) {
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: "office-hidden-sheets",
+              fieldName: "Hidden Workbook Sheets",
+              rawKey: "Excel.HiddenSheets",
+              value: hiddenSheets.join(", "),
+              dataType: "string",
+              group: "embedded",
+              parserId: this.id,
+              isSensitive: true,
+              sensitivityReason: "Hidden Excel tabs are omitted from normal view but remain readable in XML",
+            })
+          );
+        }
+      }
+    }
+
     return {
       parserId: this.id,
       parserVersion: this.version,

@@ -6,8 +6,10 @@ import { getFormatSupportStatus, ParserRegistry, type FormatParser } from "./ind
 describe("ParserRegistry", () => {
   it("reports accurate support statuses and builds size-aware analysis plans", async () => {
     expect(getFormatSupportStatus("jpeg")).toBe("fully_supported");
+    expect(getFormatSupportStatus("webp")).toBe("fully_supported");
     expect(getFormatSupportStatus("pdf")).toBe("partially_supported");
-    expect(getFormatSupportStatus("pe")).toBe("identification_only");
+    expect(getFormatSupportStatus("pe")).toBe("partially_supported");
+    expect(getFormatSupportStatus("macho")).toBe("identification_only");
     expect(getFormatSupportStatus("nonexistent")).toBe("unsupported");
 
     const registry = new ParserRegistry();

@@ -342,6 +342,44 @@ export class WavParser implements FormatParser {
             subPos += 8 + subLen + (subLen % 2);
           }
         }
+      } else if (fourcc === "bext" && chunkSize >= 346 && chunkSize <= 64 * 1024) {
+        const bext = await ctx.reader.read(offset + 8, Math.min(chunkSize, 512), ctx.signal);
+        const orig = new TextDecoder("latin1").decode(bext.subarray(256, 288)).replace(/\0+$/, "").trim();
+        const origRef = new TextDecoder("latin1").decode(bext.subarray(288, 320)).replace(/\0+$/, "").trim();
+        const origDate = new TextDecoder("latin1").decode(bext.subarray(320, 330)).replace(/\0+$/, "").trim();
+        const origTime = new TextDecoder("latin1").decode(bext.subarray(330, 338)).replace(/\0+$/, "").trim();
+        if (orig) {
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: `bext-orig-${offset}`,
+              fieldName: "BWF Originator (DAW / Recorder)",
+              rawKey: "bext.Originator",
+              value: origRef ? `${orig} (${origRef})` : orig,
+              dataType: "string",
+              group: "audio",
+              parserId: this.id,
+              byteRange: { start: offset + 8 + 256, length: 64 },
+              isSensitive: true,
+              sensitivityReason: "Broadcast Wave Originator reveals studio hardware or DAW software",
+            })
+          );
+        }
+        if (origDate) {
+          fields.push(
+            createMetadataField(ctx, {
+              idSuffix: `bext-date-${offset}`,
+              fieldName: "BWF Origination Timestamp",
+              rawKey: "bext.OriginationDate",
+              value: origTime ? `${origDate} ${origTime}` : origDate,
+              dataType: "date",
+              group: "audio",
+              parserId: this.id,
+              byteRange: { start: offset + 8 + 320, length: 18 },
+              isSensitive: true,
+              sensitivityReason: "Broadcast Wave recording timestamp",
+            })
+          );
+        }
       }
 
       offset += 8 + padded;

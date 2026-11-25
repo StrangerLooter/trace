@@ -1,6 +1,7 @@
+import { computeShannonEntropy, extractPrintableStrings } from "@trace/binary-core";
 import type { FormatParser, ParserContext, ParserOutput } from "@trace/parser-registry";
 import type { DetectedStructure, ForensicFinding, MetadataField } from "@trace/shared-types";
-import { createMetadataField, emitStructure } from "./helpers";
+import { createMetadataField, emitAnomaly, emitStructure } from "./helpers";
 
 const PE_MACHINES: Record<number, string> = {
   0x014c: "x86 (32-bit)",
@@ -146,12 +147,61 @@ export class PeHeaderParser implements FormatParser {
         const rawSize = sv.getUint32(16, true);
         const rawPtr = sv.getUint32(20, true);
         if (rawPtr + rawSize > maxSectionEnd) maxSectionEnd = rawPtr + rawSize;
+
+        let entropyNote = "";
+        if (rawSize > 0 && rawPtr > 0 && rawPtr + Math.min(rawSize, 512 * 1024) <= totalSize) {
+          const secSlice = await ctx.reader.read(rawPtr, Math.min(rawSize, 512 * 1024), ctx.signal);
+          const ent = computeShannonEntropy(secSlice);
+          entropyNote = `entropy=${ent.toFixed(2)}`;
+          if (ent >= 7.2 && rawSize >= 4096) {
+            findings.push(
+              emitAnomaly(ctx, this.id, {
+                id: `${ctx.fileId}:pe-high-entropy-${i}`,
+                ruleId: "rule-pe-high-entropy-section",
+                category: "structure",
+                title: `High-entropy PE section '${name || i}' (${ent.toFixed(2)} bits/byte)`,
+                severity: "medium",
+                explanation: `Section '${name || i}' has Shannon entropy ${ent.toFixed(2)} / 8.00, typical of packed or encrypted payloads.`,
+                evidence: `Section ${name || i} rawPtr=0x${rawPtr.toString(16)}, size=${rawSize}, entropy=${ent.toFixed(2)}`,
+                affectedFieldIds: [],
+                byteRange: { start: secTableOffset + base, length: 40 },
+                whyItMatters: "Packed or obfuscated binaries elevate section entropy above 7.2 bits/byte.",
+                suggestedAction: "Inspect imports and section data in RE Mode / Hex Inspector.",
+                detectionMethod: this.id,
+                confidence: "confirmed",
+              })
+            );
+          }
+        }
+
         structures.push(
           emitStructure(ctx, this.id, {
             id: `pe-sec-${i}`,
-            name: `Section ${name || i} (header)`,
+            name: `Section ${name || i} ${entropyNote ? `(${entropyNote})` : "(header)"}`,
             type: "pe-section-header",
             byteRange: { start: secTableOffset + base, length: 40 },
+          })
+        );
+      }
+
+      // Bounded scan for embedded RSDS / .pdb local build path disclosure
+      const scanWindow = await ctx.reader.read(0, Math.min(totalSize, 2 * 1024 * 1024), ctx.signal);
+      const pdbHit = extractPrintableStrings(scanWindow, 0, 8, 300).find(
+        (s) => s.encoding === "ascii" && /\.pdb$/i.test(s.text.trim())
+      );
+      if (pdbHit) {
+        fields.push(
+          createMetadataField(ctx, {
+            idSuffix: "pdb-path",
+            fieldName: "Embedded PDB Debug Path",
+            rawKey: "PE.DebugPDBPath",
+            value: pdbHit.text.trim(),
+            dataType: "string",
+            group: "binary",
+            parserId: this.id,
+            byteRange: { start: pdbHit.offset, length: pdbHit.length },
+            isSensitive: true,
+            sensitivityReason: "PDB path often leaks developer username and local build workspace path",
           })
         );
       }
