@@ -1,0 +1,25 @@
+{
+  "name": "@trace/parsers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trace/binary-core": "workspace:*",
+    "@trace/event-system": "workspace:*",
+    "@trace/parser-registry": "workspace:*",
+    "@trace/shared-types": "workspace:*",
+    "exifr": "^7.1.3",
+    "fast-xml-parser": "^5.2.3",
+    "fflate": "^0.8.2",
+    "music-metadata": "^11.3.0"
+  },
+  "devDependencies": {
+    "@trace/file-signatures": "workspace:*",
+    "@trace/report-schema": "workspace:*"
+  }
+}
