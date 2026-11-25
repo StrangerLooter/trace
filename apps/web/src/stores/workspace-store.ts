@@ -19,6 +19,7 @@ export type WorkspaceSection =
   | "forensics"
   | "hex"
   | "sanitizer"
+  | "diff"
   | "export";
 
 export type JobStatus = "queued" | "analyzing" | "completed" | "cancelled" | "error";
@@ -28,6 +29,7 @@ export interface FileSession {
   file: File;
   fileName: string;
   sizeBytes: number;
+  fileLastModifiedMs?: number;
   declaredMime: string | null;
   status: JobStatus;
   errorMessage?: string;
@@ -109,6 +111,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       file,
       fileName: file.name,
       sizeBytes: file.size,
+      fileLastModifiedMs: file.lastModified || undefined,
       declaredMime: file.type || null,
       status: initialStatus,
       fields: [],

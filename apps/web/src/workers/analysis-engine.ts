@@ -104,6 +104,22 @@ export async function runAnalysisJob(
     const plan = registry.plan(identification, reader.byteLength);
 
     const fields: MetadataField[] = [];
+    if (cmd.fileLastModifiedMs && cmd.fileLastModifiedMs > 0) {
+      fields.push({
+        id: `${cmd.fileId}:os:last-modified`,
+        fieldName: "OS Filesystem Last Modified",
+        rawKey: "OS.FileLastModified",
+        value: new Date(cmd.fileLastModifiedMs).toISOString(),
+        displayValue: new Date(cmd.fileLastModifiedMs).toISOString(),
+        dataType: "date",
+        group: "general",
+        sourceParser: "browser-file-api",
+        confidence: "confirmed",
+        isSensitive: true,
+        sensitivityReason: "Reflects OS save/download timestamp on device (separate from embedded shutter/creation date)",
+        status: "valid",
+      });
+    }
     const structures: DetectedStructure[] = [];
     const parserFindings: ForensicFinding[] = [];
     const warnings = [...plan.warnings];
@@ -184,7 +200,9 @@ export async function runAnalysisJob(
 
     const forensicResult = evaluateForensicRules({
       fileId: cmd.fileId,
+      fileName: cmd.fileName,
       fileSizeBytes: reader.byteLength,
+      fileLastModifiedMs: cmd.fileLastModifiedMs,
       identification,
       fields,
       structures,

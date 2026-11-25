@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { registerCustomSignatures } from "@trace/file-signatures";
 import { createDefaultParserRegistry } from "@trace/parsers";
 import { runAnalysisJob, runHexWindowRead } from "./analysis-engine";
 import type { AnalysisWorkerRequest, AnalysisWorkerResponse } from "./protocol";
@@ -18,6 +19,11 @@ self.addEventListener("message", (event: MessageEvent<AnalysisWorkerRequest>) =>
     const controller = activeControllers.get(cmd.fileId);
     controller?.abort();
     activeControllers.delete(cmd.fileId);
+    return;
+  }
+
+  if (cmd.type === "register_custom_signatures") {
+    registerCustomSignatures(cmd.rules);
     return;
   }
 

@@ -1,4 +1,5 @@
 import type { TraceEvent } from "@trace/event-system";
+import type { CustomSignatureRule } from "@trace/file-signatures";
 import type { ForensicRiskSummary } from "@trace/forensics";
 import type { AnalysisPlan } from "@trace/parser-registry";
 import type {
@@ -16,6 +17,7 @@ export interface AnalyzeFileCommand {
   file: Blob;
   fileName: string;
   declaredMime: string | null;
+  fileLastModifiedMs?: number;
 }
 
 export interface ReadHexWindowCommand {
@@ -32,10 +34,16 @@ export interface CancelAnalysisCommand {
   fileId: string;
 }
 
+export interface RegisterCustomSignaturesCommand {
+  type: "register_custom_signatures";
+  rules: CustomSignatureRule[];
+}
+
 export type AnalysisWorkerRequest =
   | AnalyzeFileCommand
   | ReadHexWindowCommand
-  | CancelAnalysisCommand;
+  | CancelAnalysisCommand
+  | RegisterCustomSignaturesCommand;
 
 export interface AnalysisResultPayload {
   fileId: string;
