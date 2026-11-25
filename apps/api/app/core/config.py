@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 30
     allowed_origins: str = "http://localhost:3000,http://localhost:3015,https://trace-opal-gamma.vercel.app"
     allowed_origin_regex: str = r"^https://trace(-[a-z0-9-]+)?\.vercel\.app$"
+    custom_rules_path: str = ""
 
     @property
     def cors_origins(self) -> list[str]:

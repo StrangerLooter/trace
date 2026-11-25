@@ -24,9 +24,25 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL || "https://trace-opal-gamma.vercel.app"
+  ),
   title: "TRACE — Look Beyond the File",
   description:
     "Universal File Intelligence & Digital Forensics Workspace. Inspect hidden metadata, verify binary signatures, trace raw byte offsets, and strip sensitive tags locally in your browser.",
+  openGraph: {
+    title: "TRACE — Look Beyond the File",
+    description:
+      "Inspect true binary signatures, embedded metadata, multi-layer timestamps, and raw byte offsets locally in your browser.",
+    type: "website",
+    siteName: "TRACE File Intelligence",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TRACE — Look Beyond the File",
+    description:
+      "Local-first forensic metadata inspector, virtualized Hex Editor, RE Mode telemetry, and lossless metadata sanitizer.",
+  },
 };
 
 export default function RootLayout({

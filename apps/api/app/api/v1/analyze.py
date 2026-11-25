@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.core.config import settings
-from app.parsers.executable_parser import parse_elf_deep, parse_pe_deep
+from app.parsers.executable_parser import parse_elf_deep, parse_pe_deep, run_optional_pattern_rules
 from app.parsers.pdf_parser import parse_pdf_deep
 from app.parsers.subprocess_runner import SubprocessExecutionError, run_isolated_cli
 from app.services.scratch_manager import cleanup_job_dir, create_job_dir, sweep_expired_jobs
@@ -191,6 +191,24 @@ async def analyze_consented_file(file: Annotated[UploadFile, File()]) -> dict:
                         "timestampIso": _now_iso(),
                     }
                 )
+
+        for hit in run_optional_pattern_rules(input_path, settings.custom_rules_path):
+            parsers_used.append("custom_rules")
+            fields.append(
+                {
+                    "id": f"{job_id}:rule:{hit['id']}",
+                    "fieldName": f"Custom Rule Match ({hit['name']})",
+                    "rawKey": f"CustomRule.{hit['id']}",
+                    "value": hit["name"],
+                    "displayValue": hit["name"],
+                    "dataType": "string",
+                    "group": "embedded",
+                    "sourceParser": "backend:custom_rules",
+                    "confidence": "confirmed",
+                    "isSensitive": True,
+                    "status": "valid",
+                }
+            )
 
         events.append(
             {

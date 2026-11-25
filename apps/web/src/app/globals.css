@@ -126,3 +126,21 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* A4 Report Print Stylesheet (#38) */
+@media print {
+  header,
+  aside,
+  footer,
+  button,
+  input[type="file"] {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #111317 !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+}
