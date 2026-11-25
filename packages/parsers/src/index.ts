@@ -1,5 +1,6 @@
 import { ParserRegistry } from "@trace/parser-registry";
 import { Mp3Parser, WavParser } from "./audio";
+import { EbmlParser } from "./ebml";
 import { ElfHeaderParser, PeHeaderParser } from "./executable";
 import { JpegParser } from "./jpeg";
 import { Mp4Parser } from "./mp4";
@@ -10,6 +11,7 @@ import { WebpParser } from "./webp";
 import { ZipOfficeParser } from "./zip";
 
 export * from "./audio";
+export * from "./ebml";
 export * from "./executable";
 export * from "./helpers";
 export * from "./jpeg";
@@ -29,6 +31,7 @@ export function createDefaultParserRegistry(): ParserRegistry {
   registry.register(new Mp3Parser());
   registry.register(new WavParser());
   registry.register(new Mp4Parser());
+  registry.register(new EbmlParser());
   registry.register(new PdfParser());
   registry.register(new ZipOfficeParser());
   registry.register(new PeHeaderParser());
