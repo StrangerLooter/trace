@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     job_ttl_seconds: int = 600
     parser_timeout_seconds: int = 15
     rate_limit_per_minute: int = 30
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3000,http://localhost:3015,https://trace-opal-gamma.vercel.app"
+    allowed_origin_regex: str = r"^https://trace(-[a-z0-9-]+)?\.vercel\.app$"
 
     @property
     def cors_origins(self) -> list[str]:

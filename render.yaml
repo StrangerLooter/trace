@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: trace-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: TRACE_ENV
+        value: production
+      - key: TRACE_MAX_UPLOAD_MB
+        value: "100"
+      - key: TRACE_JOB_TTL_SECONDS
+        value: "600"
+      - key: TRACE_PARSER_TIMEOUT_SECONDS
+        value: "15"
+      - key: TRACE_RATE_LIMIT_PER_MINUTE
+        value: "30"
+      - key: TRACE_ALLOWED_ORIGINS
+        value: "https://trace-opal-gamma.vercel.app,https://trace-ram-vishwakarmas-projects.vercel.app"
+      - key: TRACE_ALLOWED_ORIGIN_REGEX
+        value: "^https://trace(-[a-z0-9-]+)?\\.vercel\\.app$"
