@@ -73,14 +73,14 @@ export interface MetadataField {
   value: string | number | boolean | string[] | null;
   displayValue: string;
   dataType:
-    | "string"
-    | "number"
-    | "boolean"
-    | "date"
-    | "coordinates"
-    | "bytes"
-    | "array"
-    | "object";
+  | "string"
+  | "number"
+  | "boolean"
+  | "date"
+  | "coordinates"
+  | "bytes"
+  | "array"
+  | "object";
   group: MetadataGroup;
   sourceParser: string;
   byteRange?: ByteRange;
@@ -144,7 +144,7 @@ export type SanitizationStatus =
 export const FORMAT_SUPPORT_STATUS_MAP: Record<string, FormatSupportStatus> = {
   jpeg: "fully_supported",
   png: "fully_supported",
-  webp: "partially_supported",
+  webp: "fully_supported",
   tiff: "partially_supported",
   gif: "partially_supported",
   heic: "partially_supported",
@@ -155,29 +155,33 @@ export const FORMAT_SUPPORT_STATUS_MAP: Record<string, FormatSupportStatus> = {
   mkv: "partially_supported",
   webm: "partially_supported",
   zip: "partially_supported",
-  docx: "partially_supported",
-  xlsx: "partially_supported",
-  pptx: "partially_supported",
+  docx: "fully_supported",
+  xlsx: "fully_supported",
+  pptx: "fully_supported",
   odt: "partially_supported",
   ods: "partially_supported",
   odp: "partially_supported",
-  mp3: "partially_supported",
-  wav: "partially_supported",
+  mp3: "fully_supported",
+  wav: "fully_supported",
   flac: "partially_supported",
   ogg: "partially_supported",
   m4a: "partially_supported",
-  pe: "identification_only",
+  pe: "partially_supported",
   dos_mz: "identification_only",
-  elf: "identification_only",
+  elf: "partially_supported",
   macho: "identification_only",
-  rar: "identification_only",
-  "7z": "identification_only",
+  rar: "partially_supported",
+  "7z": "partially_supported",
   gzip: "identification_only",
   bzip2: "identification_only",
   tar: "identification_only",
   avi: "identification_only",
   epub: "identification_only",
-  sqlite: "identification_only",
+  sqlite: "partially_supported",
+  ttf: "partially_supported",
+  otf: "partially_supported",
+  woff: "partially_supported",
+  woff2: "identification_only",
   unknown: "unsupported",
 };
 

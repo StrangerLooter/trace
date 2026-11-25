@@ -298,3 +298,89 @@ export async function streamSha256(
 
   return hasher.digest("hex");
 }
+
+/** Compute Shannon entropy in bits per byte (0.00 = uniform, 8.00 = maximally random/encrypted). */
+export function computeShannonEntropy(bytes: Uint8Array): number {
+  if (bytes.byteLength === 0) return 0;
+  const counts = new Uint32Array(256);
+  for (let i = 0; i < bytes.byteLength; i++) {
+    counts[bytes[i]]++;
+  }
+  let entropy = 0;
+  const len = bytes.byteLength;
+  for (let i = 0; i < 256; i++) {
+    const c = counts[i];
+    if (c === 0) continue;
+    const p = c / len;
+    entropy -= p * Math.log2(p);
+  }
+  return Number(entropy.toFixed(2));
+}
+
+export interface ExtractedStringHit {
+  offset: number;
+  length: number;
+  encoding: "ascii" | "utf16le";
+  text: string;
+}
+
+/** Extract bounded printable ASCII and UTF-16LE strings with exact byte offsets. */
+export function extractPrintableStrings(
+  bytes: Uint8Array,
+  baseOffset = 0,
+  minLength = 6,
+  maxHits = 200
+): ExtractedStringHit[] {
+  const hits: ExtractedStringHit[] = [];
+  const isPrintable = (b: number) => (b >= 0x20 && b <= 0x7e) || b === 0x09;
+
+  // 1. ASCII pass
+  let start = -1;
+  for (let i = 0; i <= bytes.byteLength && hits.length < maxHits; i++) {
+    if (i < bytes.byteLength && isPrintable(bytes[i])) {
+      if (start < 0) start = i;
+    } else {
+      if (start >= 0 && i - start >= minLength) {
+        const slice = bytes.subarray(start, Math.min(i, start + 256));
+        hits.push({
+          offset: baseOffset + start,
+          length: i - start,
+          encoding: "ascii",
+          text: new TextDecoder("ascii").decode(slice),
+        });
+      }
+      start = -1;
+    }
+  }
+
+  // 2. UTF-16LE pass (common in Windows PE / binary strings)
+  let uStart = -1;
+  let uChars: string[] = [];
+  for (let i = 0; i + 1 < bytes.byteLength && hits.length < maxHits; i += 2) {
+    if (isPrintable(bytes[i]) && bytes[i + 1] === 0x00) {
+      if (uStart < 0) uStart = i;
+      uChars.push(String.fromCharCode(bytes[i]));
+    } else {
+      if (uStart >= 0 && uChars.length >= minLength) {
+        hits.push({
+          offset: baseOffset + uStart,
+          length: uChars.length * 2,
+          encoding: "utf16le",
+          text: uChars.slice(0, 256).join(""),
+        });
+      }
+      uStart = -1;
+      uChars = [];
+    }
+  }
+  if (uStart >= 0 && uChars.length >= minLength && hits.length < maxHits) {
+    hits.push({
+      offset: baseOffset + uStart,
+      length: uChars.length * 2,
+      encoding: "utf16le",
+      text: uChars.slice(0, 256).join(""),
+    });
+  }
+
+  return hits.sort((a, b) => a.offset - b.offset);
+}
