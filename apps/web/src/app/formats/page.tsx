@@ -6,6 +6,8 @@ const FORMATS = [
   { format: "PNG", sig: "89 50 4E 47 0D 0A 1A 0A", status: "Fully supported (P0/P1)", exec: "Browser Worker", clean: "Ancillary chunk filter" },
   { format: "PDF", sig: "25 50 44 46 2D (%PDF-)", status: "Partial (P0) / Full (P1)", exec: "Browser + Consented Backend", clean: "Backend pikepdf/qpdf (P1)" },
   { format: "MP4 / MOV", sig: "ftyp @ offset 4", status: "Partial (P0/P1)", exec: "Browser Slices + Backend FFprobe", clean: "Stream-copy remux (P2)" },
+  { format: "MKV / WebM", sig: "1A 45 DF A3 (EBML)", status: "Partially supported (P1)", exec: "Browser Slices + Backend FFprobe", clean: "Stream-copy remux (P2)" },
+  { format: "HEIC / AVIF", sig: "ftyp heic / mif1 / avif", status: "Partially supported (P1)", exec: "Browser + Backend ExifTool", clean: "Container strip (P2)" },
   { format: "WebP / TIFF / GIF", sig: "RIFF+WEBP / II* / GIF8", status: "Partially supported (P1)", exec: "Browser Worker", clean: "Format-specific (P2)" },
   { format: "MP3 / WAV / FLAC / OGG", sig: "ID3 / RIFF+WAVE / fLaC / OggS", status: "Partially supported (P1)", exec: "Browser Worker", clean: "Tag/chunk strip (P2)" },
   { format: "DOCX / XLSX / PPTX", sig: "ZIP + OpenXML structure", status: "Partially supported (P1)", exec: "Browser Worker", clean: "docProps XML scrub (P2)" },

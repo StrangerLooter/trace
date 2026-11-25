@@ -215,4 +215,68 @@ describe("@trace/parsers", () => {
     expect(elfOut.fields.find((f) => f.rawKey === "ELF.e_machine")?.value).toBe("x86-64");
     expect(elfOut.fields.find((f) => f.rawKey === "ELF.e_entry")?.value).toBe("0x401000");
   });
+
+  it("parses HEIC ISOBMFF ispe/irot boxes and embedded EXIF TIFF", async () => {
+    const ispePayload = [0, 0, 0, 0, ...u32be(4032), ...u32be(3024)];
+    const ispeBox = [...u32be(8 + ispePayload.length), ...ascii("ispe"), ...ispePayload];
+    const irotBox = [...u32be(9), ...ascii("irot"), 1]; // 90 deg
+    const ipcoBox = [...u32be(8 + ispeBox.length + irotBox.length), ...ascii("ipco"), ...ispeBox, ...irotBox];
+    const iprpBox = [...u32be(8 + ipcoBox.length), ...ascii("iprp"), ...ipcoBox];
+    const metaBox = [...u32be(12 + iprpBox.length), ...ascii("meta"), 0, 0, 0, 0, ...iprpBox];
+    const ftypBox = [...u32be(16), ...ascii("ftyp"), ...ascii("heic"), 0, 0, 0, 0];
+
+    // Minimal little-endian TIFF with Make ("Apple") inside an mdat/Exif block
+    const makeStr = ascii("Apple\0");
+    const ifdOffset = 8;
+    const valOffset = ifdOffset + 2 + 12 + 4;
+    const tiffBytes = [
+      0x49, 0x49, 0x2a, 0x00, ...u32le(ifdOffset),
+      ...u16le(1), // 1 tag
+      ...u16le(0x010f), ...u16le(2), ...u32le(makeStr.length), ...u32le(valOffset),
+      ...u32le(0),
+      ...makeStr,
+    ];
+    const exifPayload = [...ascii("Exif\0\0"), ...tiffBytes];
+    const mdatBox = [...u32be(8 + exifPayload.length), ...ascii("mdat"), ...exifPayload];
+
+    const heicBytes = new Uint8Array([...ftypBox, ...metaBox, ...mdatBox]);
+    const out = await runParse(heicBytes, "iphone_shot.heic");
+    expect(out.fields.find((f) => f.rawKey === "ftyp.major_brand")?.value).toBe("heic");
+    expect(out.fields.find((f) => f.rawKey === "ispe.dimensions")?.value).toBe("4032x3024");
+    expect(out.fields.find((f) => f.rawKey === "irot.angle")?.value).toBe(90);
+    expect(out.fields.find((f) => f.rawKey === "EXIF.Make")?.value).toBe("Apple");
+  });
+
+  it("parses WebM/MKV EBML header, Segment Info, Tracks, and skips Clusters cleanly", async () => {
+    const ebmlEl = (idBytes: number[], payload: number[]) => [
+      ...idBytes,
+      0x80 | payload.length,
+      ...payload,
+    ];
+
+    const docType = ebmlEl([0x42, 0x82], ascii("webm"));
+    const ebmlHeader = ebmlEl([0x1a, 0x45, 0xdf, 0xa3], docType);
+
+    const writingApp = ebmlEl([0x57, 0x41], ascii("OBS Studio 30"));
+    const info = ebmlEl([0x15, 0x49, 0xa9, 0x66], writingApp);
+
+    const codecId = ebmlEl([0x86], ascii("V_VP9"));
+    const pxW = ebmlEl([0xb0], [0x07, 0x80]); // 1920
+    const pxH = ebmlEl([0xba], [0x04, 0x38]); // 1080
+    const videoEl = ebmlEl([0xe0], [...pxW, ...pxH]);
+    const trackEntry = ebmlEl([0xae], [...codecId, ...videoEl]);
+    const tracks = ebmlEl([0x16, 0x54, 0xae, 0x6b], trackEntry);
+
+    const cluster = ebmlEl([0x1f, 0x43, 0xb6, 0x75], [1, 2, 3, 4]);
+    const segment = ebmlEl([0x18, 0x53, 0x80, 0x67], [...info, ...tracks, ...cluster]);
+
+    const webmBytes = new Uint8Array([...ebmlHeader, ...segment]);
+    const out = await runParse(webmBytes, "screen_recording.webm");
+    expect(out.fields.find((f) => f.rawKey === "EBML.DocType")?.value).toBe("webm");
+    expect(out.fields.find((f) => f.rawKey === "Segment.Info.WritingApp")?.value).toBe("OBS Studio 30");
+    expect(out.fields.find((f) => f.rawKey === "Tracks.TrackEntry.CodecID")?.value).toBe("V_VP9");
+    expect(out.fields.find((f) => f.rawKey === "Tracks.Video.PixelWidth")?.value).toBe(1920);
+    expect(out.fields.find((f) => f.rawKey === "Tracks.Video.PixelHeight")?.value).toBe(1080);
+    expect(out.coveragePatch.containerIndexInspected).toBe(true);
+  });
 });

@@ -46,7 +46,7 @@ export function OverviewPanel({
 
     const safeRaster =
       id &&
-      ["jpeg", "png", "webp", "gif"].includes(id.formatId) &&
+      ["jpeg", "png", "webp", "gif", "avif"].includes(id.formatId) &&
       session.sizeBytes > 0 &&
       session.sizeBytes <= 25 * 1024 * 1024;
 
