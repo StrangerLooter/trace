@@ -1,3 +1,4 @@
+import { computeShannonEntropy } from "@trace/binary-core";
 import type { DetectedStructure } from "@trace/shared-types";
 
 export interface DataInspectorValues {
@@ -12,6 +13,8 @@ export interface DataInspectorValues {
   uint32BE: number | null;
   uint64LE: string | null;
   float32LE: string | null;
+  unixTimeUtc: string | null;
+  mp4TimeUtc: string | null;
   asciiChar: string;
 }
 
@@ -24,6 +27,14 @@ export function decodeDataInspector(
   const b0 = bytes[0];
   const asciiChar = b0 >= 0x20 && b0 <= 0x7e ? String.fromCharCode(b0) : ".";
 
+  const u32le = bytes.byteLength >= 4 ? dv.getUint32(0, true) : null;
+  const u32be = bytes.byteLength >= 4 ? dv.getUint32(0, false) : null;
+  const fmtUnix = (sec: number | null): string | null => {
+    if (sec === null || sec < 946684800 || sec > 2524608000) return null;
+    return new Date(sec * 1000).toISOString().slice(0, 19) + "Z";
+  };
+  const mp4EpochSec = u32be !== null ? u32be - 2082844800 : null;
+
   return {
     offsetHex: `0x${absoluteOffset.toString(16).toUpperCase().padStart(8, "0")}`,
     binary8: `0b${b0.toString(2).padStart(8, "0")}`,
@@ -32,8 +43,8 @@ export function decodeDataInspector(
     uint16LE: bytes.byteLength >= 2 ? dv.getUint16(0, true) : null,
     uint16BE: bytes.byteLength >= 2 ? dv.getUint16(0, false) : null,
     int32LE: bytes.byteLength >= 4 ? dv.getInt32(0, true) : null,
-    uint32LE: bytes.byteLength >= 4 ? dv.getUint32(0, true) : null,
-    uint32BE: bytes.byteLength >= 4 ? dv.getUint32(0, false) : null,
+    uint32LE: u32le,
+    uint32BE: u32be,
     uint64LE: bytes.byteLength >= 8 ? dv.getBigUint64(0, true).toString() : null,
     float32LE:
       bytes.byteLength >= 4
@@ -41,8 +52,28 @@ export function decodeDataInspector(
           ? dv.getFloat32(0, true).toPrecision(6)
           : String(dv.getFloat32(0, true))
         : null,
+    unixTimeUtc: fmtUnix(u32le),
+    mp4TimeUtc: fmtUnix(mp4EpochSec),
     asciiChar,
   };
+}
+
+/** Sample up to 64 bounded 1 KB windows across a file to render a non-blocking Shannon entropy sparkline. */
+export async function computeFileEntropyBuckets(
+  file: Blob,
+  buckets = 48
+): Promise<Array<{ offset: number; entropy: number }>> {
+  if (file.size === 0) return [];
+  const count = Math.min(buckets, Math.max(1, Math.ceil(file.size / 1024)));
+  const step = Math.max(1024, Math.floor(file.size / count));
+  const out: Array<{ offset: number; entropy: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const offset = Math.min(file.size - 1, i * step);
+    const len = Math.min(1024, file.size - offset);
+    const bytes = new Uint8Array(await file.slice(offset, offset + len).arrayBuffer());
+    out.push({ offset, entropy: computeShannonEntropy(bytes) });
+  }
+  return out;
 }
 
 export function parseHexPattern(input: string): Uint8Array | null {

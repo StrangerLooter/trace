@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, CloudUpload, Hash, Shield, XCircle } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Clock, CloudUpload, Hash, MapPin, Shield, XCircle } from "lucide-react";
 import type { MetadataField } from "@trace/shared-types";
 import type { FileSession } from "@/stores/workspace-store";
 
@@ -33,10 +33,31 @@ export function OverviewPanel({
   ) => void;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showMapPreview, setShowMapPreview] = useState(false);
   const [backendConsent, setBackendConsent] = useState(false);
   const [remoteBusy, setRemoteBusy] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const id = session.identification;
+
+  const timelineInfo = useMemo(() => {
+    const capture = session.fields.find((f) =>
+      /^(datetimeoriginal|createdate|creationdate|mvhd\.creation_time|segment\.info\.dateutc)$/i.test(
+        f.rawKey ?? f.fieldName
+      )
+    );
+    const osIso = session.fileLastModifiedMs ? new Date(session.fileLastModifiedMs).toISOString() : null;
+    const capVal = capture ? String(capture.value) : null;
+    return { captureField: capture, captureIso: capVal, osIso };
+  }, [session.fields, session.fileLastModifiedMs]);
+
+  const gpsCoords = useMemo(() => {
+    const latField = session.fields.find((f) => /^(latitude|exif\.latitude|gpslatitude)$/i.test(f.rawKey ?? f.fieldName) && typeof f.value === "number");
+    const lonField = session.fields.find((f) => /^(longitude|exif\.longitude|gpslongitude)$/i.test(f.rawKey ?? f.fieldName) && typeof f.value === "number");
+    if (latField && lonField && typeof latField.value === "number" && typeof lonField.value === "number") {
+      return { lat: latField.value, lon: lonField.value };
+    }
+    return null;
+  }, [session.fields]);
 
   // Safe local raster preview via createImageBitmap -> canvas PNG blob (never SVG/HTML/PDF)
   useEffect(() => {
@@ -289,6 +310,73 @@ export function OverviewPanel({
             </p>
           )}
         </div>
+      </div>
+
+      {/* Multi-Layer Timeline & Opt-In GPS Location Cards (#1, #2) */}
+      <div className={`grid gap-4 ${gpsCoords ? "lg:grid-cols-2" : "grid-cols-1"}`}>
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-medium text-[var(--text-primary)]">Multi-Layer Timestamp Trail</h3>
+            <Clock className="h-4 w-4 text-[var(--accent-primary)]" aria-hidden="true" />
+          </div>
+          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+            <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-3">
+              <dt className="font-mono-tech text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                1. Embedded Capture / Creation
+              </dt>
+              <dd className="font-mono-tech mt-1 break-all text-[var(--text-primary)]">
+                {timelineInfo.captureIso ?? "Not embedded (or stripped)"}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] p-3">
+              <dt className="font-mono-tech text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                2. OS Filesystem LastModified
+              </dt>
+              <dd className="font-mono-tech mt-1 break-all text-[var(--text-primary)]">
+                {timelineInfo.osIso ?? "Unavailable"}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-2.5 text-[11px] text-[var(--text-muted)]">
+            Transfers (downloads / messenger Document shares) update OS dates while original embedded tags preserve camera shutter time unless stripped by platforms like standard WhatsApp image compression.
+          </p>
+        </div>
+
+        {gpsCoords && (
+          <div className="rounded-xl border border-[var(--status-warning)]/40 bg-[var(--bg-secondary)] p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-[var(--status-warning)]" aria-hidden="true" />
+                <h3 className="text-sm font-medium text-[var(--text-primary)]">GPS Coordinates Detected</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMapPreview((v) => !v)}
+                className="font-mono-tech rounded-full border border-[var(--border-strong)] bg-[var(--bg-primary)] px-3 py-1 text-[11px] text-[var(--accent-primary)] hover:border-[var(--accent-primary)]"
+              >
+                {showMapPreview ? "Hide Map" : "Load OSM Map Preview"}
+              </button>
+            </div>
+            <p className="font-mono-tech mt-2 text-xs text-[var(--text-secondary)]">
+              Lat: {gpsCoords.lat.toFixed(6)}, Lon: {gpsCoords.lon.toFixed(6)} •{" "}
+              <a
+                href={`https://www.openstreetmap.org/?mlat=${gpsCoords.lat}&mlon=${gpsCoords.lon}#map=15/${gpsCoords.lat}/${gpsCoords.lon}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--accent-primary)] hover:underline"
+              >
+                Open in OpenStreetMap
+              </a>
+            </p>
+            {showMapPreview && (
+              <iframe
+                title="Embedded GPS OpenStreetMap Location Preview"
+                className="mt-3 h-44 w-full rounded-lg border border-[var(--border-subtle)]"
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${gpsCoords.lon - 0.01},${gpsCoords.lat - 0.01},${gpsCoords.lon + 0.01},${gpsCoords.lat + 0.01}&layer=mapnik&marker=${gpsCoords.lat},${gpsCoords.lon}`}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Explicit-Consent Backend Escalation Card */}

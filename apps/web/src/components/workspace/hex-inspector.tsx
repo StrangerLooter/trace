@@ -2,9 +2,11 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { extractPrintableStrings } from "@trace/binary-core";
 import type { ByteRange, DetectedStructure } from "@trace/shared-types";
 import type { WorkerCoordinator } from "@/workers/coordinator";
 import {
+  computeFileEntropyBuckets,
   decodeDataInspector,
   flattenStructures,
   parseHexPattern,
@@ -46,7 +48,28 @@ export const HexInspector = React.memo(function HexInspector({
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchStatus, setSearchStatus] = useState<string | null>(null);
+  const [entropyBuckets, setEntropyBuckets] = useState<Array<{ offset: number; entropy: number }>>([]);
+  const [showStrings, setShowStrings] = useState(false);
   const searchAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setEntropyBuckets([]);
+    if (fileSize === 0) return;
+    void computeFileEntropyBuckets(file, 48)
+      .then((buckets) => {
+        if (active) setEntropyBuckets(buckets);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [file, fileSize]);
+
+  const extractedStrings = useMemo(
+    () => (showStrings ? extractPrintableStrings(windowBytes, windowStart, 6, 80) : []),
+    [showStrings, windowBytes, windowStart]
+  );
 
   useEffect(() => {
     const updateCols = () => setBytesPerRow(window.innerWidth < 768 ? 8 : 16);
@@ -275,7 +298,103 @@ export const HexInspector = React.memo(function HexInspector({
             {searchStatus}
           </span>
         )}
+        <button
+          type="button"
+          onClick={() => setShowStrings((p) => !p)}
+          className={`min-h-[38px] rounded-lg border px-3 text-xs font-medium ${
+            showStrings
+              ? "border-[var(--accent-primary)] bg-[var(--accent-soft)] text-[var(--accent-primary)]"
+              : "border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[var(--text-secondary)]"
+          }`}
+        >
+          Strings ({windowBytes.byteLength > 0 ? "ASCII/UTF16" : "0"})
+        </button>
       </div>
+
+      {/* Entropy Sparkline & Structure Jump Bookmarks (#22, #31) */}
+      {(entropyBuckets.length > 0 || flatStructures.length > 0) && (
+        <div className="space-y-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3.5">
+          {entropyBuckets.length > 0 && (
+            <div>
+              <div className="mb-1 flex items-center justify-between font-mono-tech text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                <span>Entropy Map (0–8 bits/byte • Click bar to jump)</span>
+                <span>Peak: {Math.max(...entropyBuckets.map((b) => b.entropy)).toFixed(2)}</span>
+              </div>
+              <div className="flex h-8 items-end gap-0.5 rounded bg-[var(--bg-primary)] p-1">
+                {entropyBuckets.map((b) => {
+                  const pct = Math.max(8, Math.round((b.entropy / 8) * 100));
+                  const high = b.entropy >= 7.2;
+                  return (
+                    <button
+                      key={b.offset}
+                      type="button"
+                      title={`0x${b.offset.toString(16).toUpperCase()}: entropy ${b.entropy.toFixed(2)}`}
+                      onClick={() => jumpTo(b.offset)}
+                      style={{ height: `${pct}%` }}
+                      className={`flex-1 rounded-t-xs transition-opacity hover:opacity-80 ${
+                        high ? "bg-[var(--status-warning)]" : "bg-[var(--accent-primary)]/70"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {flatStructures.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-mono-tech mr-1 text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                Regions:
+              </span>
+              {flatStructures.slice(0, 12).map((s, idx) => {
+                const pal = STRUCT_PALETTE[idx % STRUCT_PALETTE.length];
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => jumpTo(s.byteRange.start)}
+                    style={{ backgroundColor: pal.bg, color: pal.fg }}
+                    className="font-mono-tech rounded px-2 py-0.5 text-[10px] hover:underline"
+                  >
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showStrings && (
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3.5">
+          <div className="mb-2 flex items-center justify-between font-mono-tech text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+            <span>Extracted Window Strings (&gt;= 6 chars, {extractedStrings.length} hits)</span>
+            <span>Click to focus offset</span>
+          </div>
+          {extractedStrings.length === 0 ? (
+            <p className="text-xs text-[var(--text-secondary)]">No printable ASCII or UTF-16LE strings inside current 2 KB window.</p>
+          ) : (
+            <div className="max-h-40 overflow-y-auto space-y-1 font-mono-tech text-xs">
+              {extractedStrings.map((hit) => (
+                <button
+                  key={`${hit.encoding}-${hit.offset}`}
+                  type="button"
+                  onClick={() => jumpTo(hit.offset)}
+                  className="flex w-full items-baseline gap-3 rounded px-2 py-1 text-left hover:bg-[var(--bg-primary)]"
+                >
+                  <span className="shrink-0 text-[var(--accent-primary)]">
+                    0x{hit.offset.toString(16).toUpperCase().padStart(8, "0")}
+                  </span>
+                  <span className="shrink-0 text-[10px] uppercase text-[var(--text-muted)]">
+                    {hit.encoding}
+                  </span>
+                  <span className="truncate text-[var(--text-secondary)]">{hit.text}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ImHex-Inspired 3-Pane Cockpit: Hex Editor + Data Inspector + Pattern Data Table */}
       <div className="grid gap-4 xl:grid-cols-12">
@@ -390,6 +509,8 @@ export const HexInspector = React.memo(function HexInspector({
                 ["uint32_t (BE)", String(inspectorValues.uint32BE ?? "—")],
                 ["uint64_t (LE)", inspectorValues.uint64LE ?? "—"],
                 ["float (32 bit)", inspectorValues.float32LE ?? "—"],
+                ["Unix Time (LE)", inspectorValues.unixTimeUtc ?? "—"],
+                ["MP4 1904 Time", inspectorValues.mp4TimeUtc ?? "—"],
                 ["ASCII Char", `'${inspectorValues.asciiChar}'`],
               ].map(([label, val]) => (
                 <div key={label} className="flex justify-between gap-2 py-1.5">

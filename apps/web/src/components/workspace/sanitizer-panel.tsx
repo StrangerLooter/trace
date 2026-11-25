@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, Eraser, ShieldAlert } from "lucide-react";
 import type { SanitizationReportRecord } from "@trace/report-schema";
 import {
+  createSanitizedZipBundle,
   getSanitizationCapabilities,
   sanitizeLocalFile,
   type SanitizationCategoryId,
@@ -13,9 +14,11 @@ import type { FileSession } from "@/stores/workspace-store";
 
 export function SanitizerPanel({
   session,
+  allSessions,
   onRecordSanitization,
 }: {
   session: FileSession;
+  allSessions?: FileSession[];
   onRecordSanitization: (fileId: string, record: SanitizationReportRecord) => void;
 }) {
   const formatId = session.identification?.formatId ?? "unknown";
@@ -32,6 +35,62 @@ export function SanitizerPanel({
     warnings: string[];
   } | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+
+  const orientationField = session.fields.find(
+    (f) => f.rawKey === "Orientation" && f.value !== 1 && f.value !== "Horizontal (normal)"
+  );
+  const localBatchCandidates = (allSessions ?? []).filter(
+    (s) => getSanitizationCapabilities(s.identification?.formatId ?? "unknown").executionMode === "local_browser"
+  );
+
+  const handleBatchZip = async () => {
+    if (localBatchCandidates.length < 2) return;
+    setBatchBusy(true);
+    try {
+      const outputs: Array<{ filename: string; bytes: Uint8Array }> = [];
+      for (const s of localBatchCandidates) {
+        const fid = s.identification?.formatId ?? "unknown";
+        const c = getSanitizationCapabilities(fid);
+        const cats = c.categories.filter((cat) => cat.sensitiveDefault).map((cat) => cat.id);
+        if (cats.length === 0) continue;
+        const r = await sanitizeLocalFile(s.file, s.fileName, fid, cats);
+        if (r.outputBytes.byteLength > 0) {
+          outputs.push({ filename: r.suggestedFilename, bytes: r.outputBytes });
+        }
+      }
+      if (outputs.length > 0) {
+        const zipBytes = createSanitizedZipBundle(outputs);
+        const blob = new Blob([zipBytes.slice()], { type: "application/zip" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "trace-sanitized-batch.zip";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
+  const handleBakeOrientationAndStrip = async () => {
+    setRunning(true);
+    try {
+      const bitmap = await createImageBitmap(session.file);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.94));
+      if (!blob) return;
+      const clean = await sanitizeLocalFile(blob, session.fileName, "jpeg", Array.from(selected));
+      setResult(clean);
+    } finally {
+      setRunning(false);
+    }
+  };
 
   useEffect(() => {
     const defaults = new Set<SanitizationCategoryId>();
@@ -165,22 +224,50 @@ export function SanitizerPanel({
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Category Selection & Preview */}
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-5 space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-sm font-medium text-[var(--text-primary)]">
                 1. Select Metadata Categories
               </h4>
-              <button
-                type="button"
-                onClick={() =>
-                  setSelected(
-                    new Set(caps.categories.filter((c) => c.sensitiveDefault).map((c) => c.id))
-                  )
-                }
-                className="text-xs text-[var(--accent-primary)] hover:underline"
-              >
-                Select All Sensitive
-              </button>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelected(
+                      new Set(caps.categories.filter((c) => c.sensitiveDefault).map((c) => c.id))
+                    )
+                  }
+                  className="rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-0.5 text-[11px] text-[var(--accent-primary)] hover:border-[var(--accent-primary)]"
+                >
+                  Strict Privacy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set(caps.categories.map((c) => c.id)))}
+                  className="rounded border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                >
+                  Select All
+                </button>
+              </div>
             </div>
+
+            {orientationField && formatId === "jpeg" && (
+              <div className="rounded-lg border border-[var(--status-warning)]/40 bg-[var(--status-warning)]/10 p-3 text-xs">
+                <p className="font-medium text-[var(--status-warning)]">
+                  Non-Normal EXIF Orientation ({String(orientationField.value)})
+                </p>
+                <p className="mt-1 text-[var(--text-secondary)]">
+                  Stripping EXIF directly may rotate this portrait sideways in some viewers. You can bake the pixel orientation into a clean re-encoded JPEG instead:
+                </p>
+                <button
+                  type="button"
+                  disabled={running}
+                  onClick={handleBakeOrientationAndStrip}
+                  className="mt-2 rounded border border-[var(--status-warning)]/50 bg-[var(--bg-primary)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:border-[var(--accent-primary)]"
+                >
+                  Re-Orient Pixels &amp; Clean JPEG
+                </button>
+              </div>
+            )}
 
             <div className="space-y-2.5">
               {caps.categories.map((cat) => (
@@ -206,15 +293,28 @@ export function SanitizerPanel({
             </div>
 
             {caps.executionMode === "local_browser" ? (
-              <button
-                type="button"
-                disabled={running || selected.size === 0}
-                onClick={handleLocalSanitize}
-                className="inline-flex min-h-[42px] items-center gap-2 rounded-full bg-[var(--cta-bg)] px-5 text-xs font-medium text-[var(--cta-text)] disabled:opacity-40"
-              >
-                <Eraser className="h-4 w-4" aria-hidden="true" />
-                <span>{running ? "Cleaning & Verifying..." : "Clean & Verify Locally"}</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  disabled={running || selected.size === 0}
+                  onClick={handleLocalSanitize}
+                  className="inline-flex min-h-[42px] items-center gap-2 rounded-full bg-[var(--cta-bg)] px-5 text-xs font-medium text-[var(--cta-text)] disabled:opacity-40"
+                >
+                  <Eraser className="h-4 w-4" aria-hidden="true" />
+                  <span>{running ? "Cleaning & Verifying..." : "Clean & Verify Locally"}</span>
+                </button>
+                {localBatchCandidates.length >= 2 && (
+                  <button
+                    type="button"
+                    disabled={batchBusy}
+                    onClick={handleBatchZip}
+                    className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--bg-primary)] px-4 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--accent-primary)] disabled:opacity-40"
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>{batchBusy ? "Bundling ZIP..." : `Clean All (${localBatchCandidates.length}) as .zip`}</span>
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="space-y-3 rounded-lg border border-[var(--status-warning)]/40 bg-[var(--bg-primary)] p-4">
                 <p className="flex items-center gap-2 text-xs font-medium text-[var(--status-warning)]">

@@ -8,6 +8,9 @@ import {
   Eraser,
   FileCode2,
   FileSearch,
+  FlaskConical,
+  GitCompare,
+  Keyboard,
   Layers,
   Menu,
   Moon,
@@ -23,9 +26,11 @@ import { TraceLogo } from "@/components/ui/trace-logo";
 import { useTheme } from "@/components/ui/theme-provider";
 import { useWorkspaceStore, type WorkspaceSection } from "@/stores/workspace-store";
 import { WorkerCoordinator } from "@/workers/coordinator";
+import { DiffPanel } from "./diff-panel";
 import { ForensicsPanel } from "./forensics-panel";
 import { MetadataPanel } from "./metadata-panel";
 import { OverviewPanel } from "./overview-panel";
+import { buildSampleEvidenceFiles } from "./sample-locker";
 
 const HexInspector = dynamic(
   () => import("./hex-inspector").then((m) => m.HexInspector),
@@ -54,15 +59,21 @@ const SECTIONS: Array<{
   { id: "forensics", label: "Forensics", icon: ShieldAlert },
   { id: "hex", label: "Hex Inspector", icon: FileCode2 },
   { id: "sanitizer", label: "Sanitizer", icon: Eraser },
+  { id: "diff", label: "Diff / Compare", icon: GitCompare },
   { id: "export", label: "Export", icon: Download },
 ];
 
 export function WorkspaceShell() {
   const { theme, toggleTheme } = useTheme();
   const inputRef = useRef<HTMLInputElement>(null);
+  const sigInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [scanLevel, setScanLevel] = useState<"quick" | "full">("quick");
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [saveHistoryOptIn, setSaveHistoryOptIn] = useState(false);
+  const [savedSummariesCount, setSavedSummariesCount] = useState(0);
+  const [customSigCount, setCustomSigCount] = useState(0);
 
   const {
     sessions,
@@ -140,6 +151,81 @@ export function WorkspaceShell() {
       coordinator.terminateWorkers();
     };
   }, [coordinator]);
+
+  // Opt-in local summary history (#37) — disabled by default, never persists file bytes
+  useEffect(() => {
+    try {
+      const enabled = localStorage.getItem("trace_history_optin") === "1";
+      setSaveHistoryOptIn(enabled);
+      const raw = localStorage.getItem("trace_session_summaries");
+      if (raw) setSavedSummariesCount((JSON.parse(raw) as unknown[]).length);
+    } catch {
+      // Ignore storage failures
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!saveHistoryOptIn) return;
+    const completed = sessionOrder
+      .map((id) => sessions[id])
+      .filter((s) => s?.status === "completed")
+      .map((s) => ({
+        fileName: s.fileName,
+        format: s.identification?.formatId ?? "unknown",
+        sizeBytes: s.sizeBytes,
+        findings: s.findings.length,
+        savedAt: new Date().toISOString(),
+      }));
+    if (completed.length === 0) return;
+    try {
+      localStorage.setItem("trace_session_summaries", JSON.stringify(completed.slice(-25)));
+      setSavedSummariesCount(completed.length);
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [saveHistoryOptIn, sessionOrder, sessions]);
+
+  // Keyboard shortcuts (#36)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "?") {
+        setShowShortcuts((v) => !v);
+      } else if (e.key === "Escape") {
+        setShowShortcuts(false);
+      } else if (e.key === "m" || e.key === "M") {
+        setMode(mode === "analysis" ? "re" : "analysis");
+      } else if (e.key >= "1" && e.key <= "7") {
+        const target = SECTIONS[Number(e.key) - 1];
+        if (target) {
+          setMode("analysis");
+          setSection(target.id);
+        }
+      } else if ((e.key === "j" || e.key === "k") && sessionOrder.length > 1 && activeFileId) {
+        const idx = sessionOrder.indexOf(activeFileId);
+        const nextIdx =
+          e.key === "j"
+            ? (idx + 1) % sessionOrder.length
+            : (idx - 1 + sessionOrder.length) % sessionOrder.length;
+        setActiveFile(sessionOrder[nextIdx]);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mode, setMode, setSection, sessionOrder, activeFileId, setActiveFile]);
+
+  const loadSampleLocker = () => {
+    const samples = buildSampleEvidenceFiles();
+    for (const file of samples) {
+      const session = addFile(file);
+      coordinator.analyzeFile(session.fileId, file);
+      if (scanLevel === "full") {
+        coordinator.hashFile(session.fileId, file);
+      }
+    }
+    setSidebarOpen(false);
+  };
 
   const enqueueFiles = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -251,6 +337,16 @@ export function WorkspaceShell() {
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">Add Files</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowShortcuts((v) => !v)}
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+            className="hidden h-10 w-10 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] sm:inline-flex"
+          >
+            <Keyboard className="h-4 w-4" />
           </button>
 
           <button
@@ -410,6 +506,67 @@ export function WorkspaceShell() {
                 );
               })}
             </div>
+            <div className="border-t border-[var(--border-subtle)] pt-3 space-y-2 text-[11px] text-[var(--text-secondary)]">
+              <button
+                type="button"
+                onClick={loadSampleLocker}
+                className="flex min-h-[36px] w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 font-medium text-[var(--accent-primary)] hover:border-[var(--accent-primary)]"
+              >
+                <FlaskConical className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Load Sample Evidence</span>
+              </button>
+
+              <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 py-2">
+                <span>Save history ({savedSummariesCount})</span>
+                <input
+                  type="checkbox"
+                  checked={saveHistoryOptIn}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setSaveHistoryOptIn(next);
+                    localStorage.setItem("trace_history_optin", next ? "1" : "0");
+                    if (!next) {
+                      localStorage.removeItem("trace_session_summaries");
+                      setSavedSummariesCount(0);
+                    }
+                  }}
+                  className="accent-[var(--accent-primary)]"
+                />
+              </label>
+
+              <input
+                ref={sigInputRef}
+                type="file"
+                accept=".json"
+                aria-label="Import custom signature JSON rules"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  try {
+                    const parsed = JSON.parse(await file.text());
+                    if (Array.isArray(parsed)) {
+                      coordinator.registerCustomSignatures(parsed);
+                      setCustomSigCount(parsed.length);
+                    }
+                  } catch {
+                    // Ignore malformed JSON
+                  }
+                }}
+                className="sr-only"
+              />
+              <button
+                type="button"
+                onClick={() => sigInputRef.current?.click()}
+                className="flex min-h-[34px] w-full items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 hover:border-[var(--border-strong)]"
+              >
+                <span>Signature Plugin (.json)</span>
+                <span className="font-mono-tech text-[10px] text-[var(--accent-primary)]">
+                  {customSigCount}
+                </span>
+              </button>
+            </div>
+
             <div className="border-t border-[var(--border-subtle)] pt-3 sm:hidden">
               <button
                 type="button"
@@ -520,13 +677,23 @@ export function WorkspaceShell() {
                   <p className="mt-1.5 max-w-md text-xs text-[var(--text-secondary)]">
                     Any file type or unknown extension. 100% local in browser Web Workers.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => inputRef.current?.click()}
-                    className="mt-5 inline-flex min-h-[42px] items-center rounded-full bg-[var(--cta-bg)] px-6 text-xs font-medium text-[var(--cta-text)]"
-                  >
-                    Upload File
-                  </button>
+                  <div className="mt-5 flex flex-wrap justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => inputRef.current?.click()}
+                      className="inline-flex min-h-[42px] items-center rounded-full bg-[var(--cta-bg)] px-6 text-xs font-medium text-[var(--cta-text)]"
+                    >
+                      Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadSampleLocker}
+                      className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--bg-primary)] px-5 text-xs font-medium text-[var(--accent-primary)] hover:border-[var(--accent-primary)]"
+                    >
+                      <FlaskConical className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Try Sample Evidence Locker (3 Files)</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : mode === "re" ? (
@@ -599,7 +766,15 @@ export function WorkspaceShell() {
                 {activeSection === "sanitizer" && (
                   <SanitizerPanel
                     session={activeSession}
+                    allSessions={sessionOrder.map((id) => sessions[id]).filter(Boolean)}
                     onRecordSanitization={addSanitizationRecord}
+                  />
+                )}
+                {activeSection === "diff" && (
+                  <DiffPanel
+                    sessions={sessions}
+                    sessionOrder={sessionOrder}
+                    activeFileId={activeFileId}
                   />
                 )}
                 {activeSection === "export" && (
@@ -610,6 +785,45 @@ export function WorkspaceShell() {
           </div>
         </main>
       </div>
+
+      {showShortcuts && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Keyboard Shortcuts"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-6 text-xs shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h2 className="font-mono-tech text-sm font-medium uppercase tracking-wider text-[var(--text-primary)]">
+                Workspace Shortcuts
+              </h2>
+              <button
+                type="button"
+                aria-label="Close shortcuts dialog"
+                onClick={() => setShowShortcuts(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <dl className="mt-4 space-y-2.5 font-mono-tech">
+              {[
+                ["1 – 7", "Switch Analysis sections (Overview..Export)"],
+                ["m", "Toggle Analysis Mode <-> RE Mode"],
+                ["j / k", "Next / Previous file in queue"],
+                ["?", "Toggle this shortcuts overlay"],
+                ["Esc", "Close active modal or mobile drawer"],
+              ].map(([k, desc]) => (
+                <div key={k} className="flex justify-between gap-3">
+                  <dt className="rounded bg-[var(--bg-primary)] px-2 py-0.5 text-[var(--accent-primary)]">{k}</dt>
+                  <dd className="text-right text-[var(--text-secondary)]">{desc}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

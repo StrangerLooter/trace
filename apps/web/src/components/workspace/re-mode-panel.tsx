@@ -6,7 +6,7 @@ import type { TraceEventSeverity } from "@trace/event-system";
 import type { FileSession } from "@/stores/workspace-store";
 import type { WorkerCoordinator } from "@/workers/coordinator";
 import { HexInspector } from "./hex-inspector";
-import { filterTraceEvents, formatEventLogText, formatEventTime } from "./re-mode-utils";
+import { filterTraceEvents, formatEventLogText, formatEventTime, computeStageTimings } from "./re-mode-utils";
 
 export function ReModePanel({
   session,
@@ -23,7 +23,10 @@ export function ReModePanel({
   const [severity, setSeverity] = useState<TraceEventSeverity | "all">("all");
   const [parserFilter, setParserFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [useRegex, setUseRegex] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const stageTimings = useMemo(() => computeStageTimings(session.events), [session.events]);
 
   const visibleSource = useMemo(() => {
     if (paused && frozenLength !== null) {
@@ -46,9 +49,10 @@ export function ReModePanel({
         severity,
         parserId: parserFilter,
         query,
+        useRegex,
         clearedAfterSequence: clearedAfterSeq,
       }),
-    [visibleSource, severity, parserFilter, query, clearedAfterSeq]
+    [visibleSource, severity, parserFilter, query, useRegex, clearedAfterSeq]
   );
 
   const handleTogglePause = () => {
@@ -95,6 +99,14 @@ export function ReModePanel({
           <span className="text-[var(--text-secondary)]">
             Parsers: {session.plan?.selectedParserIds.join(", ") || "signature-only"}
           </span>
+          {stageTimings.stages.length > 0 && (
+            <>
+              <span className="text-[var(--text-muted)]">|</span>
+              <span className="text-[var(--text-secondary)]">
+                Total: {stageTimings.totalMs}ms ({stageTimings.stages.map((s) => `${s.label} ${s.durationMs}ms`).join(", ")})
+              </span>
+            </>
+          )}
         </div>
         <span className="text-[var(--text-muted)]">
           Status: {session.status.toUpperCase()}
@@ -110,9 +122,22 @@ export function ReModePanel({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               aria-label="Search RE Mode events"
-              placeholder="Search events..."
+              placeholder={useRegex ? "Regex /EXIF|GPS/..." : "Search events..."}
               className="font-mono-tech min-h-[36px] w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-primary)] px-2.5 text-xs text-[var(--text-primary)] sm:w-44"
             />
+            <button
+              type="button"
+              onClick={() => setUseRegex((v) => !v)}
+              aria-pressed={useRegex}
+              title="Toggle regex pattern matching"
+              className={`font-mono-tech min-h-[36px] rounded-md border px-2.5 text-xs ${
+                useRegex
+                  ? "border-[var(--accent-primary)] bg-[var(--accent-soft)] text-[var(--accent-primary)]"
+                  : "border-[var(--border-subtle)] bg-[var(--bg-primary)] text-[var(--text-muted)]"
+              }`}
+            >
+              .*
+            </button>
             <select
               aria-label="Filter events by severity"
               value={severity}
