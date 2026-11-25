@@ -1,0 +1,41 @@
+services:
+  trace-api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    container_name: trace-api
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m
+    environment:
+      TRACE_ENV: production
+      TRACE_SCRATCH_DIR: /tmp/trace-jobs
+      TRACE_MAX_UPLOAD_MB: "100"
+      TRACE_JOB_TTL_SECONDS: "600"
+      TRACE_PARSER_TIMEOUT_SECONDS: "15"
+      TRACE_RATE_LIMIT_PER_MINUTE: "30"
+      TRACE_ALLOWED_ORIGINS: "https://trace.example.com"
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
