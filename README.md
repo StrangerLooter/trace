@@ -4,7 +4,8 @@
 > Inspect true binary signatures, embedded metadata, multi-layer timestamp trails, privacy risks, and raw byte offsets—locally in your browser by default.
 
 **Architect & Lead Engineer:** [Ram Vishwakarma (@StrangerLooter)](https://github.com/StrangerLooter)  
-**Repository:** `StrangerLooter/trace`
+**Repository:** [github.com/StrangerLooter/trace](https://github.com/StrangerLooter/trace)  
+**Live App (Vercel):** [trace-opal-gamma.vercel.app](https://trace-opal-gamma.vercel.app)
 
 ---
 
